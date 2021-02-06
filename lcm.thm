@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view fontsize="16">
+
+<defaultnode/>
+
+<defaultedge/>
+
+<node>
+   <type name="Event"/>
+   <type name="Int"/>
+   <type name="MemoryEvent"/>
+   <type name="Read"/>
+   <type name="String"/>
+   <type name="univ"/>
+   <type name="Write"/>
+   <type name="XSEventType"/>
+   <type name="seq/Int"/>
+   <set name="$committed_events" type="Event"/>
+   <set name="$XSRead" type="XSAccess"/>
+   <set name="$XSReaders" type="XSAccess"/>
+   <set name="$XSWrite" type="XSAccess"/>
+   <set name="$XSWriters" type="XSAccess"/>
+</node>
+
+<node hideunconnected="no">
+   <type name="XSAccess"/>
+</node>
+
+<node visible="no">
+   <type name="Address"/>
+   <type name="XRead"/>
+   <type name="XState"/>
+   <type name="XWrite"/>
+</node>
+
+<edge visible="no" attribute="yes">
+   <relation name="address"> <type name="MemoryEvent"/> <type name="Address"/> </relation>
+   <relation name="xstate"> <type name="XSAccess"/> <type name="XState"/> </relation>
+   <relation name="xstate_event_type"> <type name="XSAccess"/> <type name="XSEventType"/> </relation>
+</edge>
+
+<edge visible="no" layout="no" attribute="yes">
+   <relation name="xstate_access"> <type name="Event"/> <type name="XSAccess"/> </relation>
+</edge>
+
+</view>
+
+</alloy>
