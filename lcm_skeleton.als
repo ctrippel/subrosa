@@ -56,7 +56,7 @@ sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is d
   co: set Write							// coherence-order relation, relates all Writes to all Writes that follow it in coherence order 
 }
 
-//sig CacheFlush extends MemoryEvent { }		// CacheFlush is a subset of Memory Event
+sig CacheFlush extends MemoryEvent { }		// CacheFlush is a subset of Memory Event
 
 //abstract sig Fence extends Event { }			// Fence is a subset of Event, since it does not have xstate intractions with other instructions
 
@@ -83,14 +83,14 @@ fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}		
 fact lone_source_write { rf.~rf in iden }										// each read has a single source over rf
 
 //reads-from-init
-/*fact rf_init_in_eo {rf_init in ^eo} //Would be enough to assert irreflexivity, same_thread and first_initialization access
+fact rf_init_in_eo {rf_init in ^eo} //Would be enough to assert irreflexivity, same_thread and first_initialization access
 fact rf_init_in_same_addr {rf_init in address.~address}
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}
-fact rf_init_initialize {initialization_access[rf_init.Event] and first_initialization_access[Event.rf_init]}
+fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}
-fact rf_init_total {all e : (Read+CacheFlush) | initialization_access[e] => e in (rf_init.Event+Event.rf_init)}*/
+fact rf_init_total {all e : (Read+CacheFlush) | {some e':Event | e != e' and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
 
-//fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }
+fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }
 
 
 //from-reads relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
@@ -137,9 +137,9 @@ fun XSRMW : XSAccess { xstate_event_type.XRead & xstate_event_type.XWrite}
 fun XSReaders : XSAccess { XSRead+ XSRMW }
 fun XSWriters : XSAccess { XSWrite + XSRMW }
 
-fun erfx : Event->Event {xstate_access.rfx.XSAccess -> xstate_access.~rfx.XSAccess}		//rfx on Event level
-fun ecox : Event->Event {xstate_access.cox.XSAccess -> xstate_access.~cox.XSAccess}		//cox on Event level
-fun efrx : Event->Event {xstate_access.frx.XSAccess -> xstate_access.~frx.XSAccess}		//cox on Event level
+fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		//rfx on Event level
+fun ecox : Event->Event {(xstate_access.cox).~xstate_access}		//cox on Event level
+fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		//frx on Event level
 
 fun eXSRead : Event { xstate_access.xstate_event_type.XRead }
 fun eXSWrite : Event { xstate_access.xstate_event_type.XWrite }
@@ -149,24 +149,25 @@ fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
 fact constrain_write {Write in eXSRMW}			// Writes are always read modify write
-//fact constrain_cacheFlush {CacheFlush in XSRMW}	// CacheFlushs are always read modify write
+fact constrain_cacheFlush {CacheFlush in eXSRMW}	// CacheFlushs are always read modify write
 fact constrain_read {Read in eXSRead + eXSRMW}		// Reads are always either reads or read modify write
 
 //rfx
 fact constrain_rfx { rfx in XSWriters->XSReaders } 
-//fact rfx_acyclic { acyclic[rfx] }								// rfx is acyclic TODO: see note on atomicity, this should be part of the consistency predicate
+fact rfx_acyclic { acyclic[rfx] }								// rfx is acyclic TODO: see note on atomicity, this should be part of the consistency predicate
 fact lone_source_writex { rfx.~rfx in iden }
 
 // cox
 fact cox_transitive { transitive[cox] }
-fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }
+fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }//TODO: Add again
 fact constrain_cox { cox in XSWriters->XSWriters }			
 //fact cox_acyclic { acyclic[cox] }							// cox is acyclic TODO: see above, however this might be different
 
 fun frx : XSAccess->XSAccess {
   ~rfx.cox
   +
-  ((XSRead - (XSWrite.rfx)) <: (xstate.~xstate) :> XSWrite)
+  ((XSReaders - (XSWriters.rfx)) <: (xstate.~xstate) :> XSWriters)
+  //-iden 
 }
 fact constrain_frx { frx in XSReaders->XSWriters }
 
@@ -179,7 +180,7 @@ fact constrain_frx { frx in XSReaders->XSWriters }
 fact po_in_eo { po in ^eo }                                                              // po is a subset of ^eo
 
 // TODO: constrain com to relate committed events only
-//fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and event_commits[e'] }
+fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and event_commits[e'] }
 
 // TODO: MemoryEvents that modify the same address should modify the same xstate; however, aspects of this will
 // change if we permit xstate to be a set
@@ -254,7 +255,7 @@ fun ext [ r: Event -> Event ] : Event -> Event { r - (^po + ^~po) }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
-//pred same_address[e : Event, e' : Event] { e.address = e'.address }
+pred same_address[e : Event, e' : Event] { e.address = e'.address }
 pred po_tc[e : Event, e' : Event] { e->e' in ^po }
 // TODO: add in this helper function for eo transitive closure and predicate for same_thread when we add in eo
 // pred eo_tc[e: Event, e': Event] { e->e' in ^eo }
@@ -266,8 +267,8 @@ pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + eo) + ~^(eo+po
 // initialization access
 // there has been no write to that location yet. What does that mean? 
 // There have been no Write to the same address occured earlier, use po?
-//pred initialization_access[e : Event] {all e' : Write | not(e'->e in ^eo and same_address[e,e'])}
+pred initialization_access[e : Event] {all e' : Write | e!= e' implies not(e'->e in ^eo and same_address[e,e'])}
 
 //first initialization access
-//pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | initialization_access[e'] and same_thread[e,e'] => e'->e in ^eo}}
+pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | (e!=e' and initialization_access[e'] and same_thread[e,e']) => e->e' in ^eo}}
 //read passage in paper again, it says there something about this being okay for most applications
