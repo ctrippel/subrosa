@@ -62,6 +62,15 @@ sig CacheFlush extends MemoryEvent { }		// CacheFlush is a subset of Memory Even
 
 //abstract sig Jump extends Event {}
 
+sig Branch extends Event {}
+fact branch_has_xstate {all b:Branch | #b.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
+
+sig Jump extends Event {}
+fact branch_has_xstate {all j:Jump | #j.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
+
+
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 2: Constrain memory consitency model relation
 
@@ -100,7 +109,7 @@ fact fr_min {~rf.co + (((Event.po + po.Event) & Read)-((Event.po + po.Event) & W
 fact fr_max {fr in ~rf.co + (Read-Write.rf) <: address.~address :> Write}	
 // other events can be connected by fr but do not have to. This includes Reads that read from initial state as well. However, 
 // if an event is not committed there is no fr edge incident to it. 
-fact fr_connect {all e : Read | event_commits[e] implies e <: address.~address :> Write in fr}
+fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_commits[e]) implies e <: address.~address :> w in fr} //TODO: find better expression
 // If a Read has an outgoing fr edge it is committed and thus has to be connected to all subsequent Writes and not only to some
 
 // dependencies (for now just consists of addr)
