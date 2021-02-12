@@ -20,8 +20,12 @@ some r1 : Read | some r2 : Read | some r3 : Read | some w : Write  | some br : B
 }
 
 // Check if we can model the attack
-run{t1 && t2 && t3 && t4 && t5} for 5
+//run{t1 && t2 && t3 && t4 && t5} for 5
 
 // Check if our model captures the leakage
-//fact{t1 && t2 && t3 && t4 && t5}
-//check {all e:Event| all e':Event| no_leakage[e,e']}
+fact{t1 && t2 && t3 && t4 && t5}
+check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 5
+
+// Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (e->e' in ecomx)}}} for 5
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not intervening_access[e,e'])}}} for 5

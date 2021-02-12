@@ -149,6 +149,8 @@ fun XSWriters : XSAccess { XSWrite + XSRMW }
 fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		//rfx on Event level
 fun ecox : Event->Event {(xstate_access.cox).~xstate_access}		//cox on Event level
 fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		//frx on Event level
+fun ecomx: Event->Event {(xstate_access.comx).~xstate_access}		//comx on Event level
+//TODO: use erfx + ecox + efrx?
 
 fun eXSRead : Event { xstate_access.xstate_event_type.XRead }
 fun eXSWrite : Event { xstate_access.xstate_event_type.XWrite }
@@ -172,11 +174,12 @@ fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }//TODO: Add 
 fact constrain_cox { cox in XSWriters->XSWriters }			
 //fact cox_acyclic { acyclic[cox] }							// cox is acyclic TODO: see above, however this might be different
 
+//TODO: This is not working frx must be defined in a similar way to fr?
+//In each case we need a lemma that asserts that there is either frx or rfx
 fun frx : XSAccess->XSAccess {
   ~rfx.cox
   +
   ((XSReaders - (XSWriters.rfx)) <: (xstate.~xstate) :> XSWriters)
-  //-iden 
 }
 fact constrain_frx { frx in XSReaders->XSWriters }
 
@@ -199,7 +202,6 @@ fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and
 // fact co_in_cox { co in cox} /./Only true if not considering sets of xstate
 // fact fr_in_frx { fr in frx }
 
-
 // TODO:  "transient_events" used to be "squashed_events", so we'll have to do a find-replace in the x86_lcm file
 
 // =Committed and Transient Events=
@@ -209,6 +211,7 @@ fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }	// 
 	// Note that this definition does not work for a few special cases (e.g. only one thread with a single instruction in it),
 	// these cases can be ommitted safely though.
 
+//TODO: use all_disj e,e': Event
 fact {all e: Event| all e':Event | (e!=e' and e in committed_events and e' in committed_events and e->e' in ^(eo+~eo))
 	 implies (e->e' in ^(po+~po))}
 //TODO: exchange by fact not using all
@@ -219,11 +222,13 @@ fun transient_events : Event { Event - committed_events }						// Speculative/tr
 pred event_commits[e: Event] { e in committed_events }
 pred event_transients[e: Event] { e in transient_events }
 
-//pred intervening_access[e : Event, e' : Event] {some e'':Event| e->e'' not in  ^(com+rf_init) 
-//									    and e''->e' in comx and e'' in XSWriters and e''.xstate = e.xstate}//TEMP, might need improvement
+pred intervening_access[e : Event, e' : Event]{some e'':Event| e'' != e and e'' != e' 
+and e->e'' not in  ^com_arch and e''->e' in ecomx and e'' in eXSWriters and same_xstate[e'',e]}//TEMP, might need improvement
 
-//pred no_leakage[e : Event, e' : Event] {e->e' in (com+rf_init) => (e->e' in ^comx and not intervening_access[e,e'])}
-//add that e'' has same xstate
+pred no_leakage[e : Event, e' : Event] {e != e' and e->e' in com_arch and same_xstate[e,e'] => (e->e' in ecomx and not intervening_access[e,e'])}
+//add that e'' has same xstate -> We made the assumption that if two instructions access same xtate that 
+// they then also access same xstate, should this be a separate fact? If they don't they cannot be connected by comx
+//TODO: e != e' is true?
 
 
 //fun same_thread [rel: Event->Event] : Event->Event {
@@ -239,7 +244,9 @@ pred rmw_atomicity{frex.coex & (xstate_event_type.XRead & xstate_event_type.XWri
 
 //check{not some e:Event|#po.e>1}
 //check {not(some e : Event | e->e in ^frx)}
-//check {all e:Event| all e':Event| no_leakage[e,e']}
+
+
+check {all e:Event| all e':Event| no_leakage[e,e']}
 
 run{} for 5
 
@@ -268,6 +275,7 @@ pred same_address[e : Event, e' : Event] { e.address = e'.address }
 pred po_tc[e : Event, e' : Event] { e->e' in ^po }
 // TODO: add in this helper function for eo transitive closure and predicate for same_thread when we add in eo
 // pred eo_tc[e: Event, e': Event] { e->e' in ^eo }
+pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}
 
 //If and only if events are connected over po or eo they are part of the same thread
 pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + eo) + ~^(eo+po)) }

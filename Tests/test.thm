@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view fontsize="16">
+
+<defaultnode/>
+
+<defaultedge/>
+
+<node>
+   <type name="Int"/>
+   <type name="String"/>
+   <type name="univ"/>
+   <type name="lcm/CacheFlush"/>
+   <type name="lcm/Event"/>
+   <type name="lcm/MemoryEvent"/>
+   <type name="lcm/Read"/>
+   <type name="lcm/Write"/>
+   <type name="lcm/XRead"/>
+   <type name="lcm/XSAccess"/>
+   <type name="lcm/XWrite"/>
+   <type name="seq/Int"/>
+</node>
+
+<node visible="no">
+   <type name="lcm/Address"/>
+   <type name="lcm/XSEventType"/>
+   <type name="lcm/XState"/>
+</node>
+
+<edge visible="no" attribute="yes">
+   <relation name="address"> <type name="lcm/MemoryEvent"/> <type name="lcm/Address"/> </relation>
+   <relation name="xstate"> <type name="lcm/XSAccess"/> <type name="lcm/XState"/> </relation>
+   <relation name="xstate_access"> <type name="lcm/Event"/> <type name="lcm/XSAccess"/> </relation>
+   <relation name="xstate_event_type"> <type name="lcm/XSAccess"/> <type name="lcm/XSEventType"/> </relation>
+</edge>
+
+</view>
+
+</alloy>

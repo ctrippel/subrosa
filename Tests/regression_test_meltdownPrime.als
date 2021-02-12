@@ -1,6 +1,7 @@
 module Tests/regression_test_meltdownPrime
 open lcm_skeleton as lcm
 
+//TODO: ASSERT that instructions in first thread are both not committed
 // Spectre v1
 //NOTE: There are two additional efrx loops that is not shown in the paper that would be ruled out in most consistency predicates.
 pred t1[] {#Event = 4 and #Read = 3 and #Write = 1}
@@ -20,8 +21,12 @@ some r1 : Read | some r2 : Read | some r3 : Read | some w : Write  |
 }
 
 // Check if we can model the attack
-run{t1 && t2 && t3 && t4 && t5} for 5
+//run{t1 && t2 && t3 && t4 && t5} for 5
 
 // Check if our model captures the leakage
-//fact{t1 && t2 && t3 && t4 && t5}
-//check {all e:Event| all e':Event| no_leakage[e,e']}
+fact{t1 && t2 && t3 && t4 && t5}
+check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 5
+
+// Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (e->e' in ecomx)}}} for 5
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not intervening_access[e,e'])}}} for 5
