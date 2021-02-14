@@ -63,12 +63,16 @@ sig CacheFlush extends MemoryEvent { }		// CacheFlush is a subset of Memory Even
 //abstract sig Jump extends Event {}
 
 sig Branch extends Event {}
-fact branch_has_xstate {all b:Branch | #b.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
+fact branch_has_xstate {all b : Branch | #b.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
 
 sig Jump extends Event {}
-fact branch_has_xstate {all j:Jump | #j.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
+fact branch_has_xstate {all j : Jump | #j.xstate_access > 0} // Find better way to express this, choose 0 because I thought = 1 might be harder
 
-
+sig REG extends Read {}
+fact reg_has_xstate{all r : REG | #r.xstate_access > 0}
+fact reg_no_shared_xstate {all r : REG | all e : Event | e != r implies e.xstate_access.xstate != r.xstate_access.xstate}
+fact reg_no_shared_memory {all r : REG | all e : Event | e != r implies e.address != r.address}
+//fact reg_no_rf_init {all r : REG | all e : Event | rf_init.r != e and r.rf_init != e}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
