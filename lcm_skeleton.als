@@ -7,7 +7,7 @@ module lcm_skeleton
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
-
+//TODO: add distinct all over instead of e!=e'
 sig Address { }							// set of physical address objects representing shared memory locations
 sig XState { }							// extra-architectural state locations
 
@@ -17,7 +17,7 @@ sig Event {							// set of instruction objects representing assembly language p
   eo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
 									// to the sequence of instructions in which they began execution
   xstate_access: lone XSAccess				// extra-architectural state accesses
-									// TODO: will be changed to set later
+									// NOTE: this will be changed to set later
 }
 
 abstract sig XSEventType { }				// extra-architectural state types
@@ -72,7 +72,7 @@ sig REG extends Read {}
 fact reg_has_xstate{all r : REG | #r.xstate_access > 0}
 fact reg_no_shared_xstate {all r : REG | all e : Event | e != r implies e.xstate_access.xstate != r.xstate_access.xstate}
 fact reg_no_shared_memory {all r : REG | all e : Event | e != r implies e.address != r.address}
-//fact reg_no_rf_init {all r : REG | all e : Event | rf_init.r != e and r.rf_init != e}
+fact reg_no_rf_init {all r : REG | all e : Event | rf_init.r != e and r.rf_init != e}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,8 +117,8 @@ fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_comm
 // If a Read has an outgoing fr edge it is committed and thus has to be connected to all subsequent Writes and not only to some
 
 // dependencies (for now just consists of addr)
-//fun dep : Read->MemoryEvent { addr }
-//fact dep_in_eo { dep in ^eo }
+fun dep : Read->MemoryEvent { addr }
+fact dep_in_eo { dep in ^eo }
 
 // Performance optimizations
 // Events that do not access architectural state nor extra-architectural state are ommitted since they are not interesting to our analysis
@@ -137,11 +137,11 @@ fact xstate_access_surj {XSAccess in Event.xstate_access}
 
 //eo
 fact eo_acyclic { acyclic[eo] }							// eo is acyclic
-fact eo_prior { all e : Event | lone e.~eo }					// all events are related to 0 or 1 events by eo
+fact eo_prior { all e : Event | lone e.~eo }				// all events are related to 0 or 1 events by eo
 
 //comx
 fun comx : XSAccess -> XSAccess { rfx + frx + cox }
-fact comx_in_same_xstate { comx in xstate.~xstate }			//NOTE: this will change once we allow set of xstate
+fact comx_in_same_xstate { comx in xstate.~xstate }		// any comx relation 
 
 // helper functions
 fun XSRead : XSAccess { xstate_event_type.XRead }
@@ -212,11 +212,10 @@ fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and
 
 fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }	// Committed events are events that 
 	// are either related by po with other events or have an incoming or outgoing com edge
-	// Note that this definition does not work for a few special cases (e.g. only one thread with a single instruction in it),
+	// Note that this definition does not work for one special cases (only one thread with a single instruction in it),
 	// these cases can be ommitted safely though.
 
-//TODO: use all_disj e,e': Event
-fact {all e: Event| all e':Event | (e!=e' and e in committed_events and e' in committed_events and e->e' in ^(eo+~eo))
+fact {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(eo+~eo))
 	 implies (e->e' in ^(po+~po))}
 //TODO: exchange by fact not using all
 // committed_events <:Event.Event:> committed_events
@@ -233,7 +232,7 @@ pred no_leakage[e : Event, e' : Event] {e != e' and e->e' in com_arch and same_x
 //add that e'' has same xstate -> We made the assumption that if two instructions access same xtate that 
 // they then also access same xstate, should this be a separate fact? If they don't they cannot be connected by comx
 //TODO: e != e' is true?
-
+pred leakage[e : Event, e' : Event] {not no_leakage[e,e']}
 
 //fun same_thread [rel: Event->Event] : Event->Event {
  // rel & ( iden + ^eo + ~^eo )
@@ -249,8 +248,31 @@ pred rmw_atomicity{frex.coex & (xstate_event_type.XRead & xstate_event_type.XWri
 //check{not some e:Event|#po.e>1}
 //check {not(some e : Event | e->e in ^frx)}
 
+pred is_sink [e: Event] {some e':Event | leakage[e',e]}
 
-check {all e:Event| all e':Event| no_leakage[e,e']}
+//one sig Sink{}
+//fun Sinks : Event->Sink {Event->Sink}
+//fact {all e: Event | e in Sinks.Sink => sink[e]}
+
+//pred candidate_source [e:Event]{some s:Event | e!=s and sink[s] and e->s in ^~ecomx} Think about situations where e is candidate_source
+//for two sinks. Can this be possible?
+pred candidate_source [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx}
+
+pred xstate_leakage[source:Event,sink:Event] {candidate_source[source,sink] /*and not leakage_is_benign*/}
+//fun xstate_leakage:Event->Event{ {all e,e': Event | xstate_leakage[e,e']} => Event.po else po.Event}
+
+pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr}
+
+
+//TODO: Is this trans or not? In the paper it is not said but done
+
+//TODO: Reflexivity
+
+
+// TODO: delete long-term, just to show that this is possible.
+// Here one could define different sets of xstate as privilige domains
+//pred leakage_is_benign[e:Event] {candidate_source[e] => {all e: Event | no_leakage[e]}}
+
 
 run{} for 5
 
