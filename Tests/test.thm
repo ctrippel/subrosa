@@ -11,8 +11,10 @@
    <type name="Int"/>
    <type name="String"/>
    <type name="univ"/>
+   <type name="lcm/Branch"/>
    <type name="lcm/CacheFlush"/>
    <type name="lcm/Event"/>
+   <type name="lcm/Jump"/>
    <type name="lcm/MemoryEvent"/>
    <type name="lcm/Read"/>
    <type name="lcm/Write"/>
@@ -20,6 +22,22 @@
    <type name="lcm/XSAccess"/>
    <type name="lcm/XWrite"/>
    <type name="seq/Int"/>
+   <set name="$sink" type="lcm/Event"/>
+   <set name="$source" type="lcm/Event"/>
+   <set name="$t5_a0" type="lcm/Address"/>
+   <set name="$t5_a1" type="lcm/Address"/>
+   <set name="$t5_br" type="lcm/Branch"/>
+   <set name="$t5_cf" type="lcm/CacheFlush"/>
+   <set name="$t5_r1" type="lcm/Read"/>
+   <set name="$t5_r2" type="lcm/Read"/>
+   <set name="$t5_r3" type="lcm/Read"/>
+   <set name="$t5_s0" type="lcm/XState"/>
+   <set name="$t5_s1" type="lcm/XState"/>
+   <set name="$t5_s2" type="lcm/XState"/>
+</node>
+
+<node showlabel="no">
+   <set name="$is_sink_e&apos;" type="lcm/Event"/>
 </node>
 
 <node visible="no">
