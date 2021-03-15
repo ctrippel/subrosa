@@ -8,13 +8,15 @@ module lcm_skeleton
 
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
 //TODO: add distinct all over instead of e!=e'
-sig Address { }							// set of physical address objects representing shared memory locations
+sig Address {							// set of physical address objects representing shared memory locations
+  privilege_domain: one PrivilegeDomain
+}
 sig XState { }							// extra-architectural state locations
 
 sig Event {							// set of instruction objects representing assembly language program instructions
   po: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
 									// to the instruction sequencing of committed instructions
-  eo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
+  tfo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
 									// to the sequence of instructions in which they began execution
   xstate_access: lone XSAccess				// extra-architectural state accesses
 									// NOTE: this will be changed to set later
@@ -81,7 +83,7 @@ fact reg_no_rf_init {all r : REG | all e : Event | rf_init.r != e and r.rf_init 
 //po
 fact po_acyclic { acyclic[po] }				// po is acyclic
 fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 1 events by po
-fact po_connect { all e : Event | all e':Event |  (e->e' in ^eo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)} // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
+fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)} // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
 
 //com
 fun com : MemoryEvent->MemoryEvent { rf + fr + co }
@@ -96,7 +98,7 @@ fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}		
 fact lone_source_write { rf.~rf in iden }										// each read has a single source over rf
 
 //reads-from-init
-fact rf_init_in_eo {rf_init in ^eo} //Would be enough to assert irreflexivity, same_thread and first_initialization access
+fact rf_init_in_tfo {rf_init in ^tfo} //Would be enough to assert irreflexivity, same_thread and first_initialization access
 fact rf_init_in_same_addr {rf_init in address.~address}
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}
 fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}
@@ -118,7 +120,7 @@ fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_comm
 
 // dependencies (for now just consists of addr)
 fun dep : Read->MemoryEvent { addr }
-fact dep_in_eo { dep in ^eo }
+fact dep_in_tfo { dep in ^tfo }
 
 // Performance optimizations
 // Events that do not access architectural state nor extra-architectural state are ommitted since they are not interesting to our analysis
@@ -135,9 +137,9 @@ fact xsaccess_simplify {XSAccess in Event.xstate_access}
 fact xstate_access_inj {xstate_access.~xstate_access in iden}
 fact xstate_access_surj {XSAccess in Event.xstate_access}
 
-//eo
-fact eo_acyclic { acyclic[eo] }							// eo is acyclic
-fact eo_prior { all e : Event | lone e.~eo }				// all events are related to 0 or 1 events by eo
+//tfo
+fact tfo_acyclic { acyclic[tfo] }							// tfo is acyclic
+fact tfo_prior { all e : Event | lone e.~tfo }				// all events are related to 0 or 1 events by tfo
 
 //comx
 fun comx : XSAccess -> XSAccess { rfx + frx + cox }
@@ -192,8 +194,8 @@ fact constrain_frx { frx in XSReaders->XSWriters }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 4: Specify relevant interactions between MCM and LCM sets and relations
 
-// relate po and eo
-fact po_in_eo { po in ^eo }                                                              // po is a subset of ^eo
+// relate po and tfo
+fact po_in_tfo { po in ^tfo }                                                              // po is a subset of ^tfo
 
 // TODO: constrain com to relate committed events only
 fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and event_commits[e'] }
@@ -215,7 +217,7 @@ fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }	// 
 	// Note that this definition does not work for one special cases (only one thread with a single instruction in it),
 	// these cases can be ommitted safely though.
 
-fact {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(eo+~eo))
+fact {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(tfo+~tfo))
 	 implies (e->e' in ^(po+~po))}
 //TODO: exchange by fact not using all
 // committed_events <:Event.Event:> committed_events
@@ -235,7 +237,7 @@ pred no_leakage[e : Event, e' : Event] {e != e' and e->e' in com_arch and same_x
 pred leakage[e : Event, e' : Event] {not no_leakage[e,e']}
 
 //fun same_thread [rel: Event->Event] : Event->Event {
- // rel & ( iden + ^eo + ~^eo )
+ // rel & ( iden + ^tfo + ~^tfo )
 //}
 /*TODO: fun coix[] : MemoryEvent->MemoryEvent { same_thread[cox] }
 fun coex[] : MemoryEvent->MemoryEvent { cox - coix }
@@ -256,6 +258,7 @@ pred is_sink [e: Event] {some e':Event | leakage[e',e]}
 
 //pred candidate_source [e:Event]{some s:Event | e!=s and sink[s] and e->s in ^~ecomx} Think about situations where e is candidate_source
 //for two sinks. Can this be possible?
+//TODO: Rename candidate_source_xstate?
 pred candidate_source [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx}
 
 pred xstate_leakage[source:Event,sink:Event] {candidate_source[source,sink] /*and not leakage_is_benign*/}
@@ -270,9 +273,12 @@ pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~add
 
 
 // TODO: delete long-term, just to show that this is possible.
-// Here one could define different sets of xstate as privilige domains
-//pred leakage_is_benign[e:Event] {candidate_source[e] => {all e: Event | no_leakage[e]}}
-
+// Here one could define different sets of xstate as privilege domains
+abstract sig PrivilegeDomain{}
+one sig AttackerControlled extends PrivilegeDomain{}
+one sig VictimControlled extends PrivilegeDomain{}
+pred leakage_is_benign[e:Event,sink:Event] {e.address.privilege_domain=sink.address.privilege_domain}
+//	=> {e.address.privilege_domain=AttackerControlled and sink.address.privilege_domain=AttackerControlled}}
 
 run{} for 5
 
@@ -299,19 +305,19 @@ fun ext [ r: Event -> Event ] : Event -> Event { r - (^po + ^~po) }
 // =LCM shortcuts=
 pred same_address[e : Event, e' : Event] { e.address = e'.address }
 pred po_tc[e : Event, e' : Event] { e->e' in ^po }
-// TODO: add in this helper function for eo transitive closure and predicate for same_thread when we add in eo
-// pred eo_tc[e: Event, e': Event] { e->e' in ^eo }
+// TODO: add in this helper function for tfo transitive closure and predicate for same_thread when we add in tfo
+// pred tfo_tc[e: Event, e': Event] { e->e' in ^tfo }
 pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}
 
-//If and only if events are connected over po or eo they are part of the same thread
-pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + eo) + ~^(eo+po)) }
+//If and only if events are connected over po or tfo they are part of the same thread
+pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + tfo) + ~^(tfo+po)) }
 
 
 // initialization access
 // there has been no write to that location yet. What does that mean? 
 // There have been no Write to the same address occured earlier, use po?
-pred initialization_access[e : Event] {all e' : Write | e!= e' implies not(e'->e in ^eo and same_address[e,e'])}
+pred initialization_access[e : Event] {all e' : Write | e!= e' implies not(e'->e in ^tfo and same_address[e,e'])}
 
 //first initialization access
-pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | (e!=e' and initialization_access[e'] and same_thread[e,e']) => e->e' in ^eo}}
+pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | (e!=e' and initialization_access[e'] and same_thread[e,e']) => e->e' in ^tfo}}
 //read passage in paper again, it says there something about this being okay for most applications

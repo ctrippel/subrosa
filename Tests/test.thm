@@ -11,19 +11,22 @@
    <type name="Int"/>
    <type name="String"/>
    <type name="univ"/>
+   <type name="lcm/AttackerControlled"/>
    <type name="lcm/Branch"/>
    <type name="lcm/CacheFlush"/>
    <type name="lcm/Event"/>
    <type name="lcm/Jump"/>
    <type name="lcm/MemoryEvent"/>
    <type name="lcm/Read"/>
+   <type name="lcm/REG"/>
+   <type name="lcm/VicitimControlled"/>
    <type name="lcm/Write"/>
    <type name="lcm/XRead"/>
    <type name="lcm/XSAccess"/>
    <type name="lcm/XWrite"/>
    <type name="seq/Int"/>
+   <set name="$candidate_source" type="lcm/Event"/>
    <set name="$sink" type="lcm/Event"/>
-   <set name="$source" type="lcm/Event"/>
    <set name="$t5_a0" type="lcm/Address"/>
    <set name="$t5_a1" type="lcm/Address"/>
    <set name="$t5_br" type="lcm/Branch"/>
@@ -42,6 +45,7 @@
 
 <node visible="no">
    <type name="lcm/Address"/>
+   <type name="lcm/PrivilegeDomain"/>
    <type name="lcm/XSEventType"/>
    <type name="lcm/XState"/>
 </node>
