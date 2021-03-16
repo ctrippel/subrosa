@@ -166,7 +166,7 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
-fact constrain_write {Write in eXSRMW}			// Writes are always read modify write
+fact constrain_write {Write in eXSRead + eXSRMW}			// Writes are always either reads or read modify write
 fact constrain_cacheFlush {CacheFlush in eXSRMW}	// CacheFlushs are always read modify write
 fact constrain_read {Read in eXSRead + eXSRMW}		// Reads are always either reads or read modify write
 
@@ -181,7 +181,7 @@ fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }
 fact constrain_cox { cox in XSWriters->XSWriters }			
 fact cox_acyclic { acyclic[cox] }							// cox is acyclic TODO: see above, however this might be different
 
-//In each case we need a lemma that asserts that there is either frx or rfx
+//TODO: we might need a lemma that asserts that there is either frx or rfx
 fun frx : XSAccess->XSAccess {
   ~rfx.cox
   +
