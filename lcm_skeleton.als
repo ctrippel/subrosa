@@ -76,8 +76,7 @@ sig REG extends Read {}                                                         
 fact reg_has_xstate{all r : REG | some {r.xstate_access}}
 fact reg_no_shared_xstate {all r : REG | all e : Event | disj[e,r] implies disj[e.xstate_access.xstate,r.xstate_access.xstate]}
 fact reg_no_shared_memory {all r : REG | all e : Event | disj[e,r] implies disj[e.address,r.address]}
-fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.rf_init,e]}
-//TODO: Can registers share state and/or xstate?
+fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.rf_init,e]}  //TODO: Can registers share state and/or xstate?
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 2: Constrain memory consitency model relation
@@ -92,7 +91,7 @@ fun com : MemoryEvent->MemoryEvent { rf + fr + co }
 fact com_in_same_addr { com in address.~address }
 
 //coherence-order
-fact co_transitive { transitive[co] }											// co is transitive
+fact co_transitive { transitive[co] }										          	// co is transitive
 fact co_total { all a : Address | total[co, a.~address & (committed_events & Write)] }		// co is total
 fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}			// co relates commited events only
 
@@ -107,10 +106,11 @@ fact rf_init_initialize {initialization_access[Event.rf_init] and initialization
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}
 fact rf_init_total {all e : (Read+CacheFlush) | {some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
 
+//com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }
 
-
-//from-reads relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
+//constrain fr edges
+// from-reads relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
 fact fr_min {~rf.co + (((Event.po + po.Event) & Read)-((Event.po + po.Event) & Write).rf) <: address.~address :> ((Event.po + po.Event) & Write) in fr} 
 // some events have to be necessarily connected by fr. This includes all Reads and all co-sucessors of Write that read from it and
 // all Reads that read from initial state if they are necessarily committed.
@@ -172,7 +172,6 @@ fact constrain_read {Read in eXSRead + eXSRMW}		// Reads are always either reads
 
 //rfx
 fact constrain_rfx { rfx in XSWriters->XSReaders } 
-fact rfx_acyclic { acyclic[rfx] }						// rfx is acyclic TODO: see note on atomicity, this should be part of the consistency predicate
 fact lone_source_writex { rfx.~rfx in iden }
 
 // cox
@@ -189,48 +188,46 @@ fun frx : XSAccess->XSAccess {
 }
 fact constrain_frx { frx in XSReaders->XSWriters }
 
-//fact frx_acyclic {  acyclic[frx] } //TODO: see above
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 4: Specify relevant interactions between MCM and LCM sets and relations
 
 // relate po and tfo
 fact po_in_tfo { po in ^tfo }                                                              // po is a subset of ^tfo
 
-// TODO: constrain com to relate committed events only
+// constrain com to relate committed events only
 fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and event_commits[e'] }
 
-// TODO: MemoryEvents that modify the same address should modify the same xstate; however, aspects of this will
+// MemoryEvents that modify the same address should modify the same xstate; however, aspects of this will
 // change if we permit xstate to be a set
-//fact same_addr_in_same_xstate { address.~address in xstate.~xstate } // same address events are also same state events
+//fact same_addr_in_same_xstate { address.~address in xstate_access.(xstate.~xstate).~xstate_access } // same address events are also same state events
 
-// TODO: relate com and comx
-// fact co_in_cox { co in cox} /./Only true if not considering sets of xstate
-// fact fr_in_frx { fr in frx }
-
-// TODO:  "transient_events" used to be "squashed_events", so we'll have to do a find-replace in the x86_lcm file
 
 // =Committed and Transient Events=
 
-fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }	// Committed events are events that 
-	// are either related by po with other events or have an incoming or outgoing com edge
-	// Note that this definition does not work for one special cases (only one thread with a single instruction in it),
-	// these cases can be ommitted safely though.
-
-fact {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(tfo+~tfo))
-	 implies (e->e' in ^(po+~po))}
-//TODO: exchange by fact not using all
-// committed_events <:Event.Event:> committed_events
-
-
+// Committed events are events that are either related by po with other events or have an incoming or outgoing rf or fr edge
+// Note that this definition does not work for one special cases (only one thread with a single instruction in it),
+// these cases can be ommitted safely though.
+fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }
 fun transient_events : Event { Event - committed_events }						// Speculative/transient events are events that are not committed.
 pred event_commits[e: Event] { e in committed_events }
 pred event_transients[e: Event] { e in transient_events }
 
-pred intervening_access[e : Event, e' : Event]{some e'':Event| disj[e'',e] and disj[e'',e'] 
-and e->e'' not in  ^com_arch and e''->e' in ecomx and e'' in eXSWriters and same_xstate[e'',e]}//TEMP, might need improvement
+// Assert that all commited event are connected by po if connected by tfo
+fact commits_connect {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(tfo+~tfo))
+	 implies (e->e' in ^(po+~po))}
 
-pred com_comx_consistent[e : Event, e' : Event]{
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SECTION 5: Leakage
+
+// =Leakage=
+
+pred intervening_access[e : Event, e' : Event]{some e'':Event| disj[e'',e] 
+and disj[e'',e'] and e->e'' not in  ^com_arch and e''->e' in ecomx 
+and e'' in eXSWriters and same_xstate[e'',e]}
+
+pred com_comx_inconsistent[e : Event, e' : Event]{
   e->e' in rf implies e->e' in erfx
   and e->e' in co implies e->e' in ecox
   and e->e' in fr implies e->e' in efrx 
@@ -238,31 +235,13 @@ pred com_comx_consistent[e : Event, e' : Event]{
 }
 
 pred no_leakage[e : Event, e' : Event] 
-{disj[e,e'] and e->e' in com_arch and same_xstate[e,e'] => (com_comx_consistent[e,e'] and not intervening_access[e,e'])}
-//add that e'' has same xstate -> We made the assumption that if two instructions access same xtate that 
-// they then also access same xstate, should this be a separate fact? If they don't they cannot be connected by comx
+{disj[e,e'] and e->e' in com_arch and same_xstate[e,e'] 
+	=> (not com_comx_inconsistent[e,e'] and not intervening_access[e,e'])}
 
 pred leakage[e : Event, e' : Event] {not no_leakage[e,e']}
 
 
-
-
-
-
-
-//fun same_thread [rel: Event->Event] : Event->Event {
- // rel & ( iden + ^tfo + ~^tfo )
-//}
-/*TODO: fun coix[] : MemoryEvent->MemoryEvent { same_thread[cox] }
-fun coex[] : MemoryEvent->MemoryEvent { cox - coix }
-fun frix[] : MemoryEvent->MemoryEvent { same_thread[frx] }
-fun frex[] : MemoryEvent->MemoryEvent { frx - frix }
-pred rmw_atomicity{frex.coex & (xstate_event_type.XRead & xstate_event_type.XWrite)}*/
-/*pred xstate_state_atomicity{}*/
-	// See NOTE above, also see paper https://dl.acm.org/doi/pdf/10.1145/3037697.3037723
-
-//check{not some e:Event|#po.e>1}
-//check {not(some e : Event | e->e in ^frx)}
+// =Define what leaks=
 
 pred is_sink [e: Event] {some e':Event | leakage[e',e]}
 
@@ -272,7 +251,7 @@ pred is_sink [e: Event] {some e':Event | leakage[e',e]}
 
 //pred candidate_source [e:Event]{some s:Event | e!=s and sink[s] and e->s in ^~ecomx} Think about situations where e is candidate_source
 //for two sinks. Can this be possible?
-//TODO: Rename candidate_source_xstate?
+
 pred candidate_source [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx}
 
 pred xstate_leakage[source:Event,sink:Event] {candidate_source[source,sink] /*and not leakage_is_benign*/}
@@ -283,8 +262,6 @@ pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~add
 
 //TODO: Reflexivity
 
-
-// TODO: delete long-term, just to show that this is possible.
 // Here one could define different sets of xstate as privilege domains
 abstract sig PrivilegeDomain{}
 one sig AttackerControlled extends PrivilegeDomain{}
@@ -292,7 +269,7 @@ one sig VictimControlled extends PrivilegeDomain{}
 pred leakage_is_benign[e:Event,sink:Event] {e.address.privilege_domain=sink.address.privilege_domain}
 //	=> {e.address.privilege_domain=AttackerControlled and sink.address.privilege_domain=AttackerControlled}}
 
-run{} for 5
+//run{} for 5
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -332,4 +309,4 @@ pred initialization_access[e : Event] {all e' : Write | disj[e,e'] implies not(e
 
 //first initialization access
 pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | (disj[e,e'] and initialization_access[e'] and same_thread[e,e']) => e->e' in ^tfo}}
-//read passage in paper again, it says there something about this being okay for most applications
+
