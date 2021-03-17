@@ -2,7 +2,7 @@ module Tests/regression_test_spectrePrime
 open lcm_skeleton as lcm
 
 // Spectre v1
-//NOTE: There are two additional efrx loops that is not shown in the paper that would be ruled out in most consistency predicates.
+//NOTE: There are two additional efrx loops that are not shown in the paper that would be ruled out in most consistency predicates.
 pred t1[] {#Event = 5 and #Branch = 1 and #Read = 3 and #Write = 1}
 pred t2[] {#Address = 2 and #XState=3}
 pred t3[] {#po=1 and #tfo=3}
@@ -21,7 +21,7 @@ some disj r1, r2, r3 : Read | some w : Write  | some br : Branch |
 fact{t1 && t2 && t3 && t4 && t5}
 
 // Check if we can model the attack
-//run{} for 5
+run{} for 5
 
 // Check if our model captures the leakage
 //check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 5

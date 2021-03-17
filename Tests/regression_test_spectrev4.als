@@ -2,7 +2,7 @@ module Tests/regression_test_spectrev4
 open lcm_skeleton as lcm
 
 // Spectre v1
-//NOTE: There are two additional efrx loops that is not shown in the paper that would be ruled out in most consistency predicates.
+//NOTE: There are two additional efrx loops that are not shown in the paper that would be ruled out in most consistency predicates.
 pred t1[] {#Event = 5 and #CacheFlush = 1 and #Read = 3 and #Write = 1}
 pred t2[] {#Address = 2 and #XState=2}
 pred t3[] {#po=2 and #tfo=4}
@@ -27,7 +27,7 @@ fact{t1 && t2 && t3 && t4 && t5}
 check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 5
 
 // Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
-//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (e->e' in ecomx)}}} for 5
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not com_comx_inconsistent[e,e'])}}} for 5
 //check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not intervening_access[e,e'])}}} for 5
 
 // Identify what is leaked
