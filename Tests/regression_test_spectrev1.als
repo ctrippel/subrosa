@@ -16,7 +16,7 @@ some cf : CacheFlush | some disj r1, r2, r3 : Read | some br : Branch |
   and (cf->br in po) and (cf->br in tfo) and (br->r1 in tfo) and (r1->r2 in tfo) and (r2->r3 in tfo) and (br->r3 in po)
   and (r1->r2 in addr) and (cf ->r2 in erfx)  and (cf->r2 in ecox) and (cf->r2 in efrx) and (r2->r3 in erfx)
   and (cf->r2 in rf_init) and (cf->r3 in rf_init)  
-  //and a0.privilege_domain = VictimControlled and a1.privilege_domain = AttackerControlled
+  and a0.privilege_domain = VictimControlled and a1.privilege_domain = AttackerControlled
 }
 
 fact{t1 && t2 && t3 && t4 && t5}
@@ -28,7 +28,7 @@ fact{t1 && t2 && t3 && t4 && t5}
 //check {not {some e:Event| some e':Event| leakage[e,e']}} for 5
 
 // Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
-//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not com_comx_inconsistent[e,e'])}}} for 5
+//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not com_comx_consistent[e,e'])}}} for 5
 //check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not intervening_access[e,e'])}}} for 5
 
 // Identify what is leaked
@@ -36,8 +36,8 @@ fact{t1 && t2 && t3 && t4 && t5}
 //check {not {some candidate_source: Event | some sink:Event | data_leakage[candidate_source,sink]}} for 5
 
 //Identify what is leaked considering Privilege Domains
-//check {not {some candidate_source: Event | some sink:Event | xstate_leakage[candidate_source,sink]
-// 	     and not leakage_is_benign[candidate_source,sink]}} for 5
+check {not {some candidate_source: Event | some sink:Event | xstate_leakage[candidate_source,sink]
+	     and not leakage_is_benign[candidate_source,sink]}} for 5
 //check {not {some candidate_source: Event | some sink:Event | data_leakage[candidate_source,sink] 
 //            and not leakage_is_benign[candidate_source,sink]}} for 5
 

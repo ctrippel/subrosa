@@ -227,16 +227,16 @@ pred intervening_access[e : Event, e' : Event]{some e'':Event| disj[e'',e]
 and disj[e'',e'] and e->e'' not in  ^com_arch and e''->e' in ecomx 
 and e'' in eXSWriters and same_xstate[e'',e]}
 
-pred com_comx_inconsistent[e : Event, e' : Event]{
-  e->e' in rf implies e->e' in erfx
-  and e->e' in co implies e->e' in ecox
-  and e->e' in fr implies e->e' in efrx 
-  and e->e' in rf_init implies e->e' in erfx
+pred com_comx_consistent[e : Event, e' : Event]{
+  (e->e' in rf implies e->e' in erfx)
+  and (e->e' in co implies e->e' in ecox)
+  and (e->e' in fr implies e->e' in efrx)
+  and (e->e' in rf_init implies e->e' in erfx)
 }
 
 pred no_leakage[e : Event, e' : Event] 
 {disj[e,e'] and e->e' in com_arch and same_xstate[e,e'] 
-	=> (not com_comx_inconsistent[e,e'] and not intervening_access[e,e'])}
+	=> (com_comx_consistent[e,e'] and not intervening_access[e,e'])}
 
 pred leakage[e : Event, e' : Event] {not no_leakage[e,e']}
 
