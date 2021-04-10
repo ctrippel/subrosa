@@ -8,7 +8,7 @@ module lcm_skeleton
 
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
 sig Address {                                                   // set of physical address objects representing shared memory locations
-  privilege_domain: one PrivilegeDomain
+  //privilege_domain: one PrivilegeDomain           // optional, there is no leakage between members of the same privilige domain
 }
 
 sig XState { }                                                  // extra-architectural state locations
@@ -19,7 +19,6 @@ sig Event {							// set of instruction objects representing assembly language p
   tfo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
 									// to the sequence of instructions in which they began execution
   xstate_access: lone XSAccess				// extra-architectural state accesses
-									// NOTE: this will be changed to set later
 }
 
 abstract sig XSEventType { }				// extra-architectural state types
@@ -48,9 +47,6 @@ abstract sig MemoryEvent extends Event{	// set of instruction objects representi
 sig Read extends MemoryEvent {			// Read is a subset of MemoryEvents that is disjoint from Write and CacheFlush
   addr : set MemoryEvent,					// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
   fr: set Write							// from-reads relation
-  // TODO: add data, crtrl later
-  // data : set Write,
-  // ctrl : set MemoryEvent
 }
 
 sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is disjoint from Read
@@ -62,21 +58,23 @@ sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is d
 // Additional Events
 
 sig Branch extends Event {}							      // Branches are Events that access xstate
-fact branch_has_xstate {all b : Branch | some {b.xstate_access}} // TODO: Is this better than all b : Branch | #b.xstate_access > 0?
+fact branch_has_xstate {all b : Branch | one {b.xstate_access}}
 
-sig Jump extends Event {}							      // Branches are Events that access xstate
-fact branch_has_xstate {all j : Jump | some {j.xstate_access}}
+sig Jump extends Event {}							      // Jumps are Events that access xstate
+fact branch_has_xstate {all j : Jump | one {j.xstate_access}}
 
 abstract sig Fence extends Event { }					      // Fences are Events that do not access xstate
 fact fence_has_no_xstate {Fence.xstate_access = none}
 
 sig CacheFlush extends MemoryEvent { }	                              // CacheFlushes are special Memory Events
+fact cf_is_xread{all c : CacheFlush | XRead in c.xstate_access.xstate_event_type } // that access xstate as a XRead or XRMW
+
 
 sig REG extends Read {}                                                              // REG operations are special reads that access xstate
 fact reg_has_xstate{all r : REG | some {r.xstate_access}}
 fact reg_no_shared_xstate {all r : REG | all e : Event | disj[e,r] implies disj[e.xstate_access.xstate,r.xstate_access.xstate]}
 fact reg_no_shared_memory {all r : REG | all e : Event | disj[e,r] implies disj[e.address,r.address]}
-fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.rf_init,e]}  //TODO: Can registers share state and/or xstate?
+fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.rf_init,e]}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 2: Constrain memory consitency model relation
@@ -99,7 +97,7 @@ fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}		
 fact lone_source_write { rf.~rf in iden }										// each read has a single source over rf
 
 //reads-from-init
-fact rf_init_in_tfo {rf_init in ^tfo} //Would be enough to assert irreflexivity, same_thread and first_initialization access
+fact rf_init_in_tfo {rf_init in ^tfo}
 fact rf_init_in_same_addr {rf_init in address.~address}
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}
 fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}
@@ -129,7 +127,6 @@ fact dep_in_tfo { dep in ^tfo }
 fact event_simplify {Event in xstate_access.XSAccess + MemoryEvent}
 // XSAccess that are not connected to any Event are ommitted
 fact xsaccess_simplify {XSAccess in Event.xstate_access}
-//fact no_trailing_fence { all f : Fence | f in Event.po and f in po.Event 
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -145,7 +142,7 @@ fact tfo_prior { all e : Event | lone e.~tfo }				// all events are related to 0
 
 //comx
 fun comx : XSAccess -> XSAccess { rfx + frx + cox }
-fact comx_in_same_xstate { comx in xstate.~xstate }		// any comx relation 
+fact comx_in_same_xstate { comx in xstate.~xstate }
 
 // helper functions
 fun XSRead : XSAccess { xstate_event_type.XRead }
@@ -154,11 +151,13 @@ fun XSRMW : XSAccess { xstate_event_type.XRead & xstate_event_type.XWrite}
 fun XSReaders : XSAccess { XSRead+ XSRMW }
 fun XSWriters : XSAccess { XSWrite + XSRMW }
 
+// lifting comx functions to event level
 fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		//rfx on Event level
 fun ecox : Event->Event {(xstate_access.cox).~xstate_access}	//cox on Event level
 fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		//frx on Event level
 fun ecomx: Event->Event {(xstate_access.comx).~xstate_access}	//comx on Event level
 
+// lifting helper functions to event level
 fun eXSRead : Event { xstate_access.xstate_event_type.XRead }
 fun eXSWrite : Event { xstate_access.xstate_event_type.XWrite }
 fun eXSRMW : Event { xstate_access.xstate_event_type.XRead & xstate_access.xstate_event_type.XWrite}
@@ -166,9 +165,9 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
-fact constrain_write {Write in eXSRead + eXSRMW}			// Writes are always either reads or read modify write
-fact constrain_cacheFlush {CacheFlush in eXSRMW}	// CacheFlushs are always read modify write
-fact constrain_read {Read in eXSRead + eXSRMW}		// Reads are always either reads or read modify write
+fact constrain_write {Write in eXSRead + eXSRMW}				// Writes are always either reads or read modify write
+fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}	// CacheFlushs are always either reads or read modify write
+fact constrain_read {Read in eXSRead + eXSRMW}			// Reads are always either reads or read modify write
 
 //rfx
 fact constrain_rfx { rfx in XSWriters->XSReaders } 
@@ -199,7 +198,7 @@ fact com_in_committed { all e, e' : Event | e->e' in com => event_commits[e] and
 
 // MemoryEvents that modify the same address should modify the same xstate; however, aspects of this will
 // change if we permit xstate to be a set
-//fact same_addr_in_same_xstate { address.~address in xstate_access.(xstate.~xstate).~xstate_access } // same address events are also same state events
+fact same_addr_in_same_xstate { address.~address in xstate_access.(xstate.~xstate).~xstate_access } // same address events are also same state events
 
 
 // =Committed and Transient Events=
@@ -223,9 +222,12 @@ fact commits_connect {all disj e,e': Event | (e in committed_events and e' in co
 
 // =Leakage=
 
-pred intervening_access[e : Event, e' : Event]{some e'':Event| disj[e'',e] 
-and disj[e'',e'] and e->e'' not in  ^com_arch and e''->e' in ecomx 
-and e'' in eXSWriters and same_xstate[e'',e]}
+pred intervening_access[e : Event, e' : Event]{
+  e->e' in com_arch and 
+ {some e'':Event| disj[e'',e] and disj[e'',e'] 
+  and e->e'' not in  ^com_arch and e''->e' in ecomx 
+  and e'' in eXSWriters}
+}
 
 pred com_comx_consistent[e : Event, e' : Event]{
   (e->e' in rf implies e->e' in erfx)
@@ -234,11 +236,27 @@ pred com_comx_consistent[e : Event, e' : Event]{
   and (e->e' in rf_init implies e->e' in erfx)
 }
 
-pred no_leakage[e : Event, e' : Event] 
-{disj[e,e'] and e->e' in com_arch and same_xstate[e,e'] 
-	=> (com_comx_consistent[e,e'] and not intervening_access[e,e'])}
+pred leakage[e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])}
+pred leakage {some e, e' : Event | leakage[e,e']}
 
-pred leakage[e : Event, e' : Event] {not no_leakage[e,e']}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // =Define what leaks=
@@ -299,6 +317,7 @@ pred po_tc[e : Event, e' : Event] { e->e' in ^po }
 pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}
 
 //If and only if events are connected over po or tfo they are part of the same thread
+//TODO: tfo should be enough, is there a po in ~tfo?
 pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + tfo) + ~^(tfo+po)) }
 
 
