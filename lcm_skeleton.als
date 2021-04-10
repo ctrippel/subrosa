@@ -8,7 +8,8 @@ module lcm_skeleton
 
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
 sig Address {                                                   // set of physical address objects representing shared memory locations
-  //privilege_domain: one PrivilegeDomain           // optional, there is no leakage between members of the same privilige domain
+  //privilege_domain: one PrivilegeDomain           // OPTIONAL, uncomment to use
+								       // there is no leakage between members of the same privilige domain
 }
 
 sig XState { }                                                  // extra-architectural state locations
@@ -58,13 +59,13 @@ sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is d
 // Additional Events
 
 sig Branch extends Event {}							      // Branches are Events that access xstate
-fact branch_has_xstate {all b : Branch | one {b.xstate_access}}
+fact branch_has_xstate {all b : Branch | one {b.xstate_access}}    //TODO: delete?
 
 sig Jump extends Event {}							      // Jumps are Events that access xstate
-fact branch_has_xstate {all j : Jump | one {j.xstate_access}}
+fact branch_has_xstate {all j : Jump | one {j.xstate_access}}	      //TODO: delete?
 
 abstract sig Fence extends Event { }					      // Fences are Events that do not access xstate
-fact fence_has_no_xstate {Fence.xstate_access = none}
+fact fence_has_no_xstate {Fence.xstate_access = none}    	      //TODO: delete?
 
 sig CacheFlush extends MemoryEvent { }	                              // CacheFlushes are special Memory Events
 fact cf_is_xread{all c : CacheFlush | XRead in c.xstate_access.xstate_event_type } // that access xstate as a XRead or XRMW
@@ -165,9 +166,12 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
+//TODO: it would be enough to assert Write in eXSRead to assert that Write always reads from xstate first.
 fact constrain_write {Write in eXSRead + eXSRMW}				// Writes are always either reads or read modify write
 fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}	// CacheFlushs are always either reads or read modify write
-fact constrain_read {Read in eXSRead + eXSRMW}			// Reads are always either reads or read modify write
+fact constrain_read {Read in eXSRead + eXSRMW}				// Reads are always either reads or read modify write
+fact constrain_read {Branch in eXSRead + eXSRMW}			// Branch are always either reads or read modify write
+fact constrain_read {Fence not in eXSRead + eXSRMW}			// Fences do not access xstate
 
 //rfx
 fact constrain_rfx { rfx in XSWriters->XSReaders } 
@@ -179,6 +183,7 @@ fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }
 fact constrain_cox { cox in XSWriters->XSWriters }			
 fact cox_acyclic { acyclic[cox] }							// cox is acyclic TODO: see above, however this might be different
 
+//frx
 //TODO: we might need a lemma that asserts that there is either frx or rfx
 fun frx : XSAccess->XSAccess {
   ~rfx.cox
@@ -247,18 +252,6 @@ pred leakage {some e, e' : Event | leakage[e,e']}
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 // =Define what leaks=
 
 pred is_sink [e: Event] {some e':Event | leakage[e',e]}
@@ -280,14 +273,13 @@ pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~add
 
 //TODO: Reflexivity
 
-// Here one could define different sets of xstate as privilege domains
-abstract sig PrivilegeDomain{}
-one sig AttackerControlled extends PrivilegeDomain{}
-one sig VictimControlled extends PrivilegeDomain{}
-pred leakage_is_benign[e:Event,sink:Event] {e.address.privilege_domain=sink.address.privilege_domain}
-//	=> {e.address.privilege_domain=AttackerControlled and sink.address.privilege_domain=AttackerControlled}}
+// =Privilege Domains=
+// OPTIONAL, uncomment to use
 
-//run{} for 5
+//abstract sig PrivilegeDomain{}
+//one sig AttackerControlled extends PrivilegeDomain{}
+//one sig VictimControlled extends PrivilegeDomain{}
+//pred leakage_is_benign[e:Event,sink:Event] {e.address.privilege_domain=sink.address.privilege_domain}
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
