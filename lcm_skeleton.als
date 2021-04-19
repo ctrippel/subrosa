@@ -59,20 +59,20 @@ sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is d
 // Additional Events
 
 sig Branch extends Event {}							      // Branches are Events that access xstate
-fact branch_has_xstate {all b : Branch | one {b.xstate_access}}    //TODO: delete?
+fact branch_has_xstate {all b : Branch | one {b.xstate_access}}
 
 sig Jump extends Event {}							      // Jumps are Events that access xstate
-fact branch_has_xstate {all j : Jump | one {j.xstate_access}}	      //TODO: delete?
+fact branch_has_xstate {all j : Jump | one {j.xstate_access}}
 
 abstract sig Fence extends Event { }					      // Fences are Events that do not access xstate
-fact fence_has_no_xstate {Fence.xstate_access = none}    	      //TODO: delete?
+fact fence_has_no_xstate {Fence.xstate_access = none}
 
 sig CacheFlush extends MemoryEvent { }	                              // CacheFlushes are special Memory Events
-fact cf_is_xread{all c : CacheFlush | XRead in c.xstate_access.xstate_event_type } // that access xstate as a XRead or XRMW
+fact cf_has_xstate {all c : CacheFlush | one {c.xstate_access}}
 
 
-sig REG extends Read {}                                                              // REG operations are special reads that access xstate
-fact reg_has_xstate{all r : REG | some {r.xstate_access}}
+sig REG extends Read {}                                                              // REG operations are special reads that access xstate but don't share a memory location or xstate with other instructions
+fact reg_has_xstate{all r : REG | one {r.xstate_access}}
 fact reg_no_shared_xstate {all r : REG | all e : Event | disj[e,r] implies disj[e.xstate_access.xstate,r.xstate_access.xstate]}
 fact reg_no_shared_memory {all r : REG | all e : Event | disj[e,r] implies disj[e.address,r.address]}
 fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.rf_init,e]}
@@ -86,8 +86,8 @@ fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 
 fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)} // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
 
 //com
-fun com : MemoryEvent->MemoryEvent { rf + fr + co }
-fact com_in_same_addr { com in address.~address }
+fun com : MemoryEvent->MemoryEvent { rf + fr + co }	// com edges are all rf, fr and co edges
+fact com_in_same_addr { com in address.~address }	// com edges only relate same address instructions
 
 //coherence-order
 fact co_transitive { transitive[co] }										          	// co is transitive
@@ -95,18 +95,18 @@ fact co_total { all a : Address | total[co, a.~address & (committed_events & Wri
 fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}			// co relates commited events only
 
 //reads-from
-fact lone_source_write { rf.~rf in iden }										// each read has a single source over rf
+fact lone_source_write { rf.~rf in iden }	// each read has a single source over rf
 
 //reads-from-init
-fact rf_init_in_tfo {rf_init in ^tfo}
-fact rf_init_in_same_addr {rf_init in address.~address}
-fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}
-fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}
-fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}
+fact rf_init_in_tfo {rf_init in ^tfo}	// rf_init follows transient fetch order 
+fact rf_init_in_same_addr {rf_init in address.~address}	// rf_init edges only relate same address instructions
+fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}		// rf_init edges only relate instructions in the same thread
+fact rf_init_initialize {first_initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
+fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 fact rf_init_total {all e : (Read+CacheFlush) | {some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
-fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }
+fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
 
 //constrain fr edges
 // from-reads relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
@@ -166,7 +166,6 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
-//TODO: it would be enough to assert Write in eXSRead to assert that Write always reads from xstate first.
 fact constrain_write {Write in eXSRead + eXSRMW}				// Writes are always either reads or read modify write
 fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}	// CacheFlushs are always either reads or read modify write
 fact constrain_read {Read in eXSRead + eXSRMW}				// Reads are always either reads or read modify write
@@ -302,22 +301,17 @@ fun ext [ r: Event -> Event ] : Event -> Event { r - (^po + ^~po) }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
-pred same_address[e : Event, e' : Event] { e.address = e'.address }
-pred po_tc[e : Event, e' : Event] { e->e' in ^po }
-// TODO: add in this helper function for tfo transitive closure and predicate for same_thread when we add in tfo
-// pred tfo_tc[e: Event, e': Event] { e->e' in ^tfo }
-pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}
+// program and transient fetch order
+pred po_tc[e : Event, e' : Event] { e->e' in ^po }	// e happens before e' in program order
+pred tfo_tc[e: Event, e': Event] { e->e' in ^tfo }	// e happens before e' in transient fetch order
+pred same_address[e : Event, e' : Event] { e.address = e'.address }						// both events have the same adress
+pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}	// both events have the same xstate
 
-//If and only if events are connected over po or tfo they are part of the same thread
-//TODO: tfo should be enough, is there a po in ~tfo?
-pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^(po + tfo) + ~^(tfo+po)) }
-
-
+pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^tfo + ^~tfo)}	// If and only if events are connected over po 
+															// or tfo they are part of the same thread
 // initialization access
-// there has been no write to that location yet. What does that mean? 
-// There have been no Write to the same address occured earlier, use po?
-pred initialization_access[e : Event] {all e' : Write | disj[e,e'] implies not(e'->e in ^tfo and same_address[e,e'])}
-
-//first initialization access
-pred first_initialization_access[e : Event] { initialization_access[e] and {all e' : Event | (disj[e,e'] and initialization_access[e'] and same_thread[e,e']) => e->e' in ^tfo}}
+pred initialization_access[e : Event]  // there has been no write to that location yet
+  {all e' : Write | (disj[e,e'] and event_commits[e']) implies not(tfo_tc[e',e] and same_address[e,e'])}
+pred first_initialization_access[e : Event]  // there is no other initialization access that happens earlier in tfo order
+  { initialization_access[e] and {all e' : Event | (disj[e,e'] and initialization_access[e'] and same_thread[e,e']) => tfo_tc[e,e']}}
 
