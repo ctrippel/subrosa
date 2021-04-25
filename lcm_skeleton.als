@@ -98,10 +98,11 @@ fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}		
 fact lone_source_write { rf.~rf in iden }	// each read has a single source over rf
 
 //reads-from-init
+//we conservatively assume that a sequential order is enforced here
 fact rf_init_in_tfo {rf_init in ^tfo}	// rf_init follows transient fetch order 
 fact rf_init_in_same_addr {rf_init in address.~address}	// rf_init edges only relate same address instructions
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}		// rf_init edges only relate instructions in the same thread
-fact rf_init_initialize {first_initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
+fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 fact rf_init_total {all e : (Read+CacheFlush) | {some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
 
@@ -143,7 +144,7 @@ fact tfo_prior { all e : Event | lone e.~tfo }				// all events are related to 0
 
 //comx
 fun comx : XSAccess -> XSAccess { rfx + frx + cox }
-fact comx_in_same_xstate { comx in xstate.~xstate }
+//fact comx_in_same_xstate { comx in xstate.~xstate }
 
 // helper functions
 fun XSRead : XSAccess { xstate_event_type.XRead }
@@ -169,8 +170,7 @@ fun eXSWriters : Event { eXSWrite + eXSRMW }
 fact constrain_write {Write in eXSRead + eXSRMW}				// Writes are always either reads or read modify write
 fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}	// CacheFlushs are always either reads or read modify write
 fact constrain_read {Read in eXSRead + eXSRMW}				// Reads are always either reads or read modify write
-fact constrain_read {Branch in eXSRead + eXSRMW}			// Branch are always either reads or read modify write
-fact constrain_read {Fence not in eXSRead + eXSRMW}			// Fences do not access xstate
+fact constrain_branch {Branch in eXSRead + eXSRMW}			// Branch are always either reads or read modify write
 
 //rfx
 fact constrain_rfx { rfx in XSWriters->XSReaders } 
@@ -311,7 +311,8 @@ pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^tfo + ^~tfo)}	// If 
 															// or tfo they are part of the same thread
 // initialization access
 pred initialization_access[e : Event]  // there has been no write to that location yet
-  {all e' : Write | (disj[e,e'] and event_commits[e']) implies not(tfo_tc[e',e] and same_address[e,e'])}
+  {e in MemoryEvent and {all e' : Write | (disj[e,e'] and event_commits[e']) implies not(tfo_tc[e',e] and same_address[e,e'])}}
 pred first_initialization_access[e : Event]  // there is no other initialization access that happens earlier in tfo order
-  { initialization_access[e] and {all e' : Event | (disj[e,e'] and initialization_access[e'] and same_thread[e,e']) => tfo_tc[e,e']}}
+  { initialization_access[e] and 
+  {all e' : Event | disj[e,e'] and e.address = e'.address  => (initialization_access[e'] and same_thread[e,e'] and tfo_tc[e,e'])}}
 
