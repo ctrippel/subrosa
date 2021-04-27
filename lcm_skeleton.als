@@ -138,30 +138,30 @@ fact xsaccess_simplify {XSAccess in Event.xstate_access}
 // SECTION 3: Constrain leakage containment model relations
 
 //xstate_access
-fact xstate_access_inj {xstate_access.~xstate_access in iden}		// Each XSAccess can only be related to one instruction
+fact xstate_access_inj {xstate_access.~xstate_access in iden}	// Each XSAccess can only be related to one instruction
 
 //tfo
-fact tfo_acyclic { acyclic[tfo] }								// tfo is acyclic
-fact tfo_prior { all e : Event | lone e.~tfo }				// all events are related to 0 or 1 events by tfo
+fact tfo_acyclic { acyclic[tfo] }						// tfo is acyclic
+fact tfo_prior { all e : Event | lone e.~tfo }		// all events are related to 0 or 1 events by tfo
 
 //comx
-fun comx : XSAccess -> XSAccess { rfx + frx + cox }
-fact comx_in_same_xstate { comx in xstate.~xstate }
+fun comx : XSAccess -> XSAccess { rfx + frx + cox }	// comx edges are all rfx, frx and cox edges
+fact comx_in_same_xstate { comx in xstate.~xstate }	// comx edges can only relate instructions with the same xstate
 
-// helper functions
+//lifting comx functions to event level
+fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		// rfx on Events
+fun ecox : Event->Event {(xstate_access.cox).~xstate_access}		// cox on Events
+fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		// frx on Events
+fun ecomx: Event->Event {(xstate_access.comx).~xstate_access}	// comx on Events
+
+//helper functions
 fun XSRead : XSAccess { xstate_event_type.XRead }
 fun XSWrite : XSAccess { xstate_event_type.XWrite }
 fun XSRMW : XSAccess { xstate_event_type.XRead & xstate_event_type.XWrite}
 fun XSReaders : XSAccess { XSRead+ XSRMW }
 fun XSWriters : XSAccess { XSWrite + XSRMW }
 
-// lifting comx functions to event level
-fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		//rfx on Event level
-fun ecox : Event->Event {(xstate_access.cox).~xstate_access}	//cox on Event level
-fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		//frx on Event level
-fun ecomx: Event->Event {(xstate_access.comx).~xstate_access}	//comx on Event level
-
-// lifting helper functions to event level
+//lifting helper functions to event level
 fun eXSRead : Event { xstate_access.xstate_event_type.XRead }
 fun eXSWrite : Event { xstate_access.xstate_event_type.XWrite }
 fun eXSRMW : Event { xstate_access.xstate_event_type.XRead & xstate_access.xstate_event_type.XWrite}
@@ -169,23 +169,22 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
-fact constrain_write {Write in eXSRead + eXSRMW}				// Writes are always either reads or read modify write
-fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}	// CacheFlushs are always either reads or read modify write
-fact constrain_read {Read in eXSRead + eXSRMW}				// Reads are always either reads or read modify write
-fact constrain_branch {Branch in eXSRead + eXSRMW}			// Branch are always either reads or read modify write
+fact constrain_write {Write in eXSRead + eXSRMW}						// Writes are always either reads or read modify write
+fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}		// CacheFlushs are always either reads or read modify write
+fact constrain_read {Read in eXSRead + eXSRMW}						// Reads are always either reads or read modify write
+fact constrain_branch {Branch in eXSRead + eXSRMW}					// Branch are always either reads or read modify write
 
 //rfx
-fact constrain_rfx { rfx in XSWriters->XSReaders } 
-fact lone_source_writex { rfx.~rfx in iden }
+fact constrain_rfx { rfx in XSWriters->XSReaders } 						// rfx edges relates instruction that write to xstate to instructions that read from it 
+fact lone_source_writex { rfx.~rfx in iden }									// each instruction has at most a single source over rfx
 
 // cox
-fact cox_transitive { transitive[cox] }
-fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }
-fact constrain_cox { cox in XSWriters->XSWriters }			
-fact cox_acyclic { acyclic[cox] }							// cox is acyclic TODO: see above, however this might be different
+fact cox_transitive { transitive[cox] }											// cox edges are transitive
+fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }	// cox is total 
+fact constrain_cox { cox in XSWriters->XSWriters }						// cox related instructions that write to xstate to instructions that write to it 
+fact cox_acyclic { acyclic[cox] }													// cox is acyclic
 
 //frx
-//TODO: we might need a lemma that asserts that there is either frx or rfx
 fun frx : XSAccess->XSAccess {
   ~rfx.cox
   +
@@ -249,7 +248,7 @@ pred leakage {some e, e' : Event | leakage[e,e']}
 
 
 
-
+//check{#Event >1 and #XSAccess > 1 and {all e: Event | #e.xstate_access > 0} implies {some e: Event | #(e.xstate_access.frx+e.xstate_access.rfx)>0}}
 
 
 
