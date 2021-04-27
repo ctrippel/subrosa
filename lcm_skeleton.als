@@ -7,71 +7,71 @@ module lcm_skeleton
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
-sig Address {                                                   // set of physical address objects representing shared memory locations
-  //privilege_domain: one PrivilegeDomain           // OPTIONAL, uncomment to use
-								       // there is no leakage between members of the same privilige domain
+
+sig Address {													// set of physical address objects representing shared memory locations
+  //privilege_domain: one PrivilegeDomain			// OPTIONAL, uncomment to use
+																	// there is no leakage between members of the same privilige domain
 }
 
-sig XState { }                                                  // extra-architectural state locations
+sig XState { }												// extra-architectural state locations
 
-sig Event {							// set of instruction objects representing assembly language program instructions
-  po: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
-									// to the instruction sequencing of committed instructions
-  tfo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
-									// to the sequence of instructions in which they began execution
-  xstate_access: lone XSAccess				// extra-architectural state accesses
+sig Event {													// set of instruction objects representing assembly language program instructions
+  po: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
+																	// to the instruction sequencing of committed instructions
+  tfo: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
+																	// to the sequence of instructions in which they began execution
+  xstate_access: lone XSAccess						// extra-architectural state accesses
 }
 
-abstract sig XSEventType { }				// extra-architectural state types
-one sig XRead extends XSEventType {}		// xstate access can behave as "read" and/or "write"
-one sig XWrite extends XSEventType { }
+abstract sig XSEventType { }						// extra-architectural state types
+one sig XRead extends XSEventType {}			// xstate access can behave as "read"
+one sig XWrite extends XSEventType { }		// and/or "write"
 
 sig XSAccess{
-  xstate: one XState,						// set of tuples of the form (XStateAccess, XState) which map each XStateAccess to the one
-									// XState element that it accesses.
-  xstate_event_type: some XSEventType,		// set of tuples of the form (XStateAccess, XSEventType) which map each XStateAccess to the 
-									// behavior it shows when accessing the xstate specified through xstate_access.
-  rfx: set XSAccess,						// rf lifted to Events
-  cox: set XSAccess						// co lifted to Events
+  xstate: one XState,										// set of tuples of the form (XStateAccess, XState) which map each XStateAccess to the one
+																	// XState element that it accesses.
+  xstate_event_type: some XSEventType,			// set of tuples of the form (XStateAccess, XSEventType) which map each XStateAccess to the 
+																	// behavior it shows when accessing the xstate specified through xstate_access.
+  rfx: set XSAccess,											// rf lifted to Events
+  cox: set XSAccess											// co lifted to Events
 }
 
-fun xrmw : XSAccess->XSAccess {			// In case that a XSAccess has both type XRead and XWrite it is an XRMW
+fun xrmw : XSAccess->XSAccess {					// In case that a XSAccess has both type XRead and XWrite it is an XRMW
   xstate_event_type.XWrite ->xstate_event_type.XRead
   & iden
 }
 
-abstract sig MemoryEvent extends Event{	// set of instruction objects representing assembly language program instructions which access architectural state
-  address: one Address,					// set of tuples of the form (Event, Address) which map each MemoryEvent to the one Address that it accesses
-  rf_init : set MemoryEvent					// memory accesses might read from the initial state of the memory
+abstract sig MemoryEvent extends Event{		// set of instruction objects representing assembly language program instructions which access architectural state
+  address: one Address,									// set of tuples of the form (Event, Address) which map each MemoryEvent to the one Address that it accesses
+  rf_init : set MemoryEvent								// memory accesses might read from the initial state of the memory
 }
 
-sig Read extends MemoryEvent {			// Read is a subset of MemoryEvents that is disjoint from Write and CacheFlush
-  addr : set MemoryEvent,					// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
-  fr: set Write							// from-reads relation
+sig Read extends MemoryEvent {					// Read is a subset of MemoryEvents that is disjoint from Write and CacheFlush
+  addr : set MemoryEvent,								// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
+  fr: set Write													// from-reads relation
 }
 
-sig Write extends MemoryEvent {			// Write is a subset of MemoryEvents that is disjoint from Read
-  rf: set Read,							// reads-from relation, relates each Write to all same-address Reads it sources
-  co: set Write							// coherence-order relation, relates all Writes to all Writes that follow it in coherence order 
+sig Write extends MemoryEvent {					// Write is a subset of MemoryEvents that is disjoint from Read
+  rf: set Read,												// reads-from relation, relates each Write to all same-address Reads it sources
+  co: set Write												// coherence-order relation, relates all Writes to all Writes that follow it in coherence order 
 }
 
 
 // Additional Events
 
-sig Branch extends Event {}							      // Branches are Events that access xstate
+sig Branch extends Event {}							// Branches are Events that access xstate
 fact branch_has_xstate {all b : Branch | one {b.xstate_access}}
 
-sig Jump extends Event {}							      // Jumps are Events that access xstate
+sig Jump extends Event {}							// Jumps are Events that access xstate
 fact branch_has_xstate {all j : Jump | one {j.xstate_access}}
 
-abstract sig Fence extends Event { }					      // Fences are Events that do not access xstate
+abstract sig Fence extends Event { }			// Fences are Events that do not access xstate
 fact fence_has_no_xstate {Fence.xstate_access = none}
 
-sig CacheFlush extends MemoryEvent { }	                              // CacheFlushes are special Memory Events
+sig CacheFlush extends MemoryEvent { }		// CacheFlushes are special Memory Events
 fact cf_has_xstate {all c : CacheFlush | one {c.xstate_access}}
 
-
-sig REG extends Read {}                                                              // REG operations are special reads that access xstate but don't share a memory location or xstate with other instructions
+sig REG extends Read {}								// REG operations are special reads that access xstate but don't share a memory location or xstate with other instructions
 fact reg_has_xstate{all r : REG | one {r.xstate_access}}
 fact reg_no_shared_xstate {all r : REG | all e : Event | disj[e,r] implies disj[e.xstate_access.xstate,r.xstate_access.xstate]}
 fact reg_no_shared_memory {all r : REG | all e : Event | disj[e,r] implies disj[e.address,r.address]}
@@ -81,16 +81,17 @@ fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.
 // SECTION 2: Constrain memory consitency model relation
 
 //po
-fact po_acyclic { acyclic[po] }					// po is acyclic
+fact po_acyclic { acyclic[po] }							// po is acyclic
 fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 1 events by po
-fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)} // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
+// If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
+fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)}
 
 //com
 fun com : MemoryEvent->MemoryEvent { rf + fr + co }	// com edges are all rf, fr and co edges
-fact com_in_same_addr { com in address.~address }	// com edges only relate same address instructions
+fact com_in_same_addr { com in address.~address }		// com edges only relate same address instructions
 
 //coherence-order
-fact co_transitive { transitive[co] }										          	// co is transitive
+fact co_transitive { transitive[co] }																				// co is transitive
 fact co_total { all a : Address | total[co, a.~address & (committed_events & Write)] }		// co is total
 fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}			// co relates commited events only
 
@@ -98,29 +99,31 @@ fact co_commited {all e : Event | event_commits[e.co] and event_commits[co.e]}		
 fact lone_source_write { rf.~rf in iden }	// each read has a single source over rf
 
 //reads-from-init
-//we conservatively assume that a sequential order is enforced here
+// we conservatively assume that a sequential order is enforced here
 fact rf_init_in_tfo {rf_init in ^tfo}	// rf_init follows transient fetch order 
 fact rf_init_in_same_addr {rf_init in address.~address}	// rf_init edges only relate same address instructions
-fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}		// rf_init edges only relate instructions in the same thread
+fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}	// rf_init edges only relate instructions in the same thread
 fact rf_init_initialize {initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
-fact rf_init_total {all e : (Read+CacheFlush) | {some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
+// if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
+fact rf_init_total	{all e : (Read+CacheFlush) | 
+						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
 
 //constrain fr edges
-// from-reads relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
-fact fr_min {~rf.co + (((Event.po + po.Event) & Read)-((Event.po + po.Event) & Write).rf) <: address.~address :> ((Event.po + po.Event) & Write) in fr} 
-// some events have to be necessarily connected by fr. This includes all Reads and all co-sucessors of Write that read from it and
+// from-reads (fr) relates each Read to all co-sucessors of Write that it read from it including Reads that read from the initial state
+// Some events have to be necessarily connected by fr. This includes all Reads and all co-sucessors of Write that read from it and
 // all Reads that read from initial state if they are necessarily committed.
-fact fr_max {fr in ~rf.co + (Read-Write.rf) <: address.~address :> Write}	
-// other events can be connected by fr but do not have to. This includes Reads that read from initial state as well. However, 
+fact fr_min {~rf.co + (((Event.po + po.Event) & Read)-((Event.po + po.Event) & Write).rf) <: address.~address :> ((Event.po + po.Event) & Write) in fr} 
+// Other events can be connected by fr but do not have to. This includes Reads that read from initial state as well. However, 
 // if an event is not committed there is no fr edge incident to it. 
-fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_commits[e]) implies e <: address.~address :> w in fr} //TODO: find better expression
+fact fr_max {fr in ~rf.co + (Read-Write.rf) <: address.~address :> Write}	
 // If a Read has an outgoing fr edge it is committed and thus has to be connected to all subsequent Writes and not only to some
+fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_commits[e] and same_address[e,w]) implies e->w in fr}
 
-// dependencies (for now just consists of addr)
+//dependencies (for now just consists of addr)
 fun dep : Read->MemoryEvent { addr }
 fact dep_in_tfo { dep in ^tfo }
 
@@ -135,16 +138,15 @@ fact xsaccess_simplify {XSAccess in Event.xstate_access}
 // SECTION 3: Constrain leakage containment model relations
 
 //xstate_access
-fact xstate_access_inj {xstate_access.~xstate_access in iden}
-fact xstate_access_surj {XSAccess in Event.xstate_access}
+fact xstate_access_inj {xstate_access.~xstate_access in iden}		// Each XSAccess can only be related to one instruction
 
 //tfo
-fact tfo_acyclic { acyclic[tfo] }							// tfo is acyclic
+fact tfo_acyclic { acyclic[tfo] }								// tfo is acyclic
 fact tfo_prior { all e : Event | lone e.~tfo }				// all events are related to 0 or 1 events by tfo
 
 //comx
 fun comx : XSAccess -> XSAccess { rfx + frx + cox }
-//fact comx_in_same_xstate { comx in xstate.~xstate }
+fact comx_in_same_xstate { comx in xstate.~xstate }
 
 // helper functions
 fun XSRead : XSAccess { xstate_event_type.XRead }
