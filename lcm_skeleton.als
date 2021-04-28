@@ -116,7 +116,7 @@ fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are 
 // Some events have to be necessarily connected by fr. This includes all Reads and all co-sucessors of Write that read from it and
 // all Reads that read from initial state if they are necessarily committed.
 fact fr_min {~rf.co + (((Event.po + po.Event) & Read)-((Event.po + po.Event) & Write).rf) <: address.~address :> ((Event.po + po.Event) & Write) in fr} 
-// Other events can be connected by fr but do not have to. This includes Reads that read from initial state as well. However, 
+// all other events can be connected by fr but do not have to. This includes Reads that read from initial state as well. However, 
 // if an event is not committed there is no fr edge incident to it. 
 fact fr_max {fr in ~rf.co + (Read-Write.rf) <: address.~address :> Write}	
 // If a Read has an outgoing fr edge it is committed and thus has to be connected to all subsequent Writes and not only to some
@@ -251,6 +251,7 @@ pred com_comx_consistent[e : Event, e' : Event]{
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
 pred leakage[e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])}
 pred leakage {some e, e' : Event | leakage[e,e']}
+fun leak : Event -> set Event {{e,e' : Event| leakage[e,e']}}
 
 // =Sink and Source instructions=
 
@@ -276,6 +277,27 @@ pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_sou
 
 // Data leakage occurs because of addr dependencies
 pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr /*and not leakage_is_benign*/}
+fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SECTION 6: Run Alloy
+
+//E.g., find models that feature leakage
+run{
+   #leak > 0
+}
+
+//E.g., find models that feature leakage between two Reads
+run{
+  some e : Read | some e' : Read | leakage[e,e']
+}
+
+//E.g., find models that feature data_leakage
+run{
+   #data_leak > 0
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =Alloy shortcuts=
