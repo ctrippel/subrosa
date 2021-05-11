@@ -195,7 +195,7 @@ fact constrain_frx { frx in XSReaders->XSWriters }
 
 // If an instruction acts as both a XRead and a XWrite, the XWrite should happen before the XRead, i.e. they should not be reordered.
 // In such a case the XRead would have to either read from initial state or from another XWrite. In both cases there would be an frx edge connecting the XRead with the XWrite.
-fact xrmw_sc {all e_xrmw : XSAccess->XSAccess | e_xrmw in xrmw implies e_xrmw not in ~frx}
+fact xrmw_sc {all x1 : XSAccess | all x2 : XSAccess | x1->x2 in xrmw implies x1->x2 not in ~frx}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 4: Specify relevant interactions between MCM and LCM sets and relations
