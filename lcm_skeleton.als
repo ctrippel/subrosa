@@ -14,7 +14,7 @@ sig Address {													// set of physical address objects representing shared
 
 sig XState { }												// extra-architectural state locations
 
-sig Event {													// set of instruction objects representing assembly language program instructions
+abstract sig Event {	   								    // set of instruction objects representing assembly language program instructions
   po: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
 																	// to the instruction sequencing of committed instructions
   tfo: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
@@ -36,7 +36,7 @@ sig XSAccess{
 }
 
 fun xrmw : XSAccess->XSAccess {					// In case that a XSAccess has both type XRead and XWrite it is an XRMW
-  xstate_event_type.XWrite ->xstate_event_type.XRead
+  xstate_event_type.XRead ->xstate_event_type.XWrite
   & iden
 }
 
@@ -193,9 +193,10 @@ fun frx : XSAccess->XSAccess {
 }
 fact constrain_frx { frx in XSReaders->XSWriters }
 
-// If an instruction acts as both a XRead and a XWrite, the XWrite should happen before the XRead, i.e. they should not be reordered.
-// In such a case the XRead would have to either read from initial state or from another XWrite. In both cases there would be an frx edge connecting the XRead with the XWrite.
-fact xrmw_sc {all x1 : XSAccess | all x2 : XSAccess | x1->x2 in xrmw implies x1->x2 not in ~frx}
+// If an instruction acts as a XRMW, i.e. both as a XRead and a XWrite, the XRead should happen before the XWrite, i.e. they should not be reordered. 
+// This means that the XRead has to read either from initial state or from another XWrite that happens before the XWrite that is part of the XRMW. 
+// Thus, there is a frx edge between the XRead and the XWrite.
+fact xrmw_sc {xrmw in frx}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 4: Specify relevant interactions between MCM and LCM sets and relations
@@ -258,7 +259,8 @@ fun leak : Event -> set Event {{e,e' : Event| leakage[e,e']}}
 
 // =Sink and Source instructions=
 
-pred is_sink [e: Event] {some e':Event | leakage[e',e]}	// the sink is the instruction where information is leaked to
+pred is_sink [e: Event] {some e' : Event | leakage[e',e]}	// the sink is the instruction where information is leaked to
+fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }
 
 // A candidate source is always defined with respect to the sink(s) it leaks too. Any instruction related to the sink by comx is a candidate of a source for leakage. 
 pred is_candidate_source [e:Event,sink:Event]{disj[e,sink] and is_sink[sink] and sink->e in ^~ecomx}
