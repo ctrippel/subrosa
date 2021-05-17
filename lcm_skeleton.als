@@ -102,7 +102,8 @@ fact lone_source_write { rf.~rf in iden }	// each read has a single source over 
 fact rf_init_in_tfo {rf_init in ^tfo}	// rf_init follows transient fetch order 
 fact rf_init_in_same_addr {rf_init in address.~address}	// rf_init edges only relate same address instructions
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}	// rf_init edges only relate instructions in the same thread
-fact rf_init_initialize {first_initialization_access[rf_init.Event] and initialization_access[Event.rf_init]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
+fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initialization_access[e]} and 
+                                 {all e: Event | e in Event.rf_init implies initialization_access[e]}}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
 fact rf_init_total	{all e : (Read+CacheFlush) | 
