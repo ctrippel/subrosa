@@ -8,7 +8,7 @@ No installation is needed! Just open the lcm_skeleton.als file in Alloy and exec
 
 ## Synthesizing a Suite of Comprehensive Litmus Tests
 
-To automatically generate a suite of interesting litmus tests follow the steps below. The generated set is minimal with respect to leakge.
+To automatically generate a suite of interesting litmus tests follow the steps below. The generated set uses leakage as minimality criterion.
 
 ### Prerequisites:
 
@@ -30,7 +30,8 @@ Basic usage:
     java -cp AlloyAnalyzer/dist/alloy4.2.jar edu.mit.csail.sdg.alloy4whole.MainClass -f <uspec.als> [-n <num_instances>] <run_command> > <outfile>
 
 Example usage:
+
     java -cp AlloyAnalyzer/dist/alloy4.2.jar edu.mit.csail.sdg.alloy4whole.MainClass -f lcm_perturbed.als test > test.out 
 
 ### Further Information
-Further information on the usage can also be found at https://github.com/ctrippel/checkmate.
+Subrosa uses the same setup as Checkmate. Thus, further details can be found on Checkmate's GitHub page: https://github.com/ctrippel/checkmate.
