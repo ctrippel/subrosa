@@ -1,9 +1,8 @@
 module lcm_skeleton
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  Specifying Leakage Containment Models Axiomatically (Programs + Candidate Executions)
-//  This file contains basic memory model sets and relations and suggestions to extend MCMs to produce LCM
-
+//  Synthesizing a Suite of Comprehensive Litmus Tests
+//  This file contains a definition of leakage containment models under pertubations
 
 ////////////////////////////////////////////////////////////////////////////////
 // SECTION 0: Pertubations
@@ -12,10 +11,9 @@ module lcm_skeleton
 abstract sig PTag {}
 
 one sig RE extends PTag {} // Remove Event
-one sig RR extends PTag {} // Remove Relation
-one sig RD extends PTag {} // Remove Dependency (RMW)
+//one sig RR extends PTag {} // Remove Relation NOTE: This is not used yet
 
-fun no_p : PTag->univ { // no_p - constant for no perturbation
+fun no_p : PTag-> univ { // no_p - constant for no perturbation
   (PTag->univ) - (PTag->univ)
 }
 
@@ -118,11 +116,12 @@ fact lone_source_write { rf.~rf in iden }	// each read has a single source over 
 fact rf_init_in_tfo {rf_init in ^tfo}	// rf_init follows transient fetch order 
 fact rf_init_in_same_addr {rf_init in address.~address}	// rf_init edges only relate same address instructions
 fact rf_init_in_same_thread {same_thread[rf_init.Event,Event.rf_init]}	// rf_init edges only relate instructions in the same thread
-fact rf_init_initialize {first_initialization_access[Event.rf_init] and initialization_access[rf_init.Event]}	// rf_init edges relate an first_initialisation_access to an initialisation_access
+fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initialization_access[e]} and 
+                                 {all e: Event | e in Event.rf_init implies initialization_access[e]}}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
 fact rf_init_total	{all e : (Read+CacheFlush) | 
-						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
+						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] implies e in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
@@ -147,7 +146,10 @@ fact dep_in_tfo { dep in ^tfo }
 fact event_simplify {Event in xstate_access.XSAccess + MemoryEvent}
 // XSAccess that are not connected to any Event are ommitted
 fact xsaccess_simplify {XSAccess in Event.xstate_access}
-
+// The following two optimizations are not used in lcm_skeleton because additional memory addresses and xstate that are not accessed
+// by any instruction might be modelled. However, regarding pertubations we are interested in obtaining minimal models.
+fact address_simplify {Address in MemoryEvent.address} 
+fact xstate_simplify {XState in XSAccess.xstate} 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 3: Constrain leakage containment model relations
@@ -244,7 +246,7 @@ pred initialization_access[e : Event]
 // it is the first acces if there is no other initialization access that happens earlier in tfo order
 pred first_initialization_access[e : Event] 
   { initialization_access[e] and 
-  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] => tfo_tc[e,e']}}
+  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] implies tfo_tc[e,e']}}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -300,29 +302,31 @@ pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_sou
 pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr /*and not leakage_is_benign*/}
 fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SECTION 6: Consistency and Confidentialiy predicate
+
+// In this file we do not want to impose any consistency or confidentiality predicate
+/*pred consistency_predicate {}
+pred confidentiality_predicate {}
+
+fact {consistency_predicate & confidentiality_predicate}*/
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SECTION 6: Pertubations
-// =Model of memory, under perturbation=
+// SECTION 7: Pertubations
+// =Model of the memory, under perturbation=
 
 //TODO: delete speculation primitive, all speculative executed instructions should be deleted
-//TODO: only delete instructions that are not included in leakage
-//TODO: use same way Dan Lustig's paper did with rf edges
-//QUESTION: still to clarify is the state of the initial state and if it changes anything if we don't assume it to be 0 and 0 to be a "special" value anymore
-
-//TODO: When do instructions change from xrmw to Read or Write?  -> Answer for now they don't 
-//TODO: If speculative should always rf_init as well. 
-
-
-//TODO: Silent store
-//TODO: Add consistency predicate. TSO
 //TODO: Check if Spectre v4 could be the result of deleting one element getting a new frx edge
 
+//ASSUMPTION: Do not introduce new rf or rfx edges after deleting an element. Instructions reading from a deleted event now read from initial memory
+// and xstate.
+//ASSUMPTION: No instruction will change it's XSEventType if an element is deleted
 
 //po and tfo
 fun po_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: po :> (Event-p[RE]) + (po.(p[RE]) -> p[RE].po)}
 fun tfo_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: tfo :> (Event-p[RE]) + (tfo.(p[RE]) -> p[RE].tfo)}
-
 
 //com edges
 // Accoring to our minimalisation criterion we won't try to delete instructions that are involved in a leakage relation. There should be no new leakage that is 
@@ -354,24 +358,26 @@ fun com_arch_p[p: PTag->univ] : MemoryEvent->MemoryEvent { rf_init_p[p] + com_p[
 // However, if a rf edge is deleted but not the Read it will also read from initial state. 
 // Thus, it becomes an initialisation access and might even be the first initialization access.
 fun rf_init_p[p: PTag->univ] : MemoryEvent->MemoryEvent { 
-  {{first_initialization_access_in_set_p [Event-p[RE],p]} <:Event->Event:> {Event.rf_init} - iden}
+  {{first_initialization_access_in_set_p [Event-p[RE],p]} <:Event->Event:> {Event.rf_init-p[RE]} - iden}
 }
 
 pred initialization_access_p[e : Event,p: PTag->univ]
   {disj[e,p[RE]] and e in MemoryEvent and 
   {all e' : (Write-p[RE]) | (disj[e,e'] and event_commits_p[e',p]) implies not(tfo_tc_p[e',e,p] and same_address[e,e'])}}
 
-//TODO: either use => or implies everywhere
-
 fun first_initialization_access_in_set_p [events : set Event,p: PTag->univ] : Event{
 {e : Event |  initialization_access_p[e,p] and 
-{all e' : events | (disj[e,e'] and e.address = e'.address  and initialization_access_p[e',p] and same_thread_p[e,e',p]  => tfo_tc_p[e,e',p])}}
+{all e' : events | (disj[e,e'] and e.address = e'.address  and initialization_access_p[e',p] and same_thread_p[e,e',p]  implies tfo_tc_p[e,e',p])}}
 }
 
-pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events }	// the event commits
+//committed events
+pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events }
 fun committed_events_p[p: PTag->univ] : Event { po_p[p].Event + Event.(po_p[p]) + Event.(rf_p[p]+fr_p[p]+~(rf_p[p])+~(fr_p[p])) }
+fun eXSWriters_p[p: PTag->univ] : Event { eXSWrite + eXSRMW - p[RE]}
 
-//comx edges 
+//comx edges
+// the same assumptions are in place as for com edges. Since there is no degree of freedom for frx edges the definition does not need to check 
+// whether an instruction is committed or not
 fun erfx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.rfx).~xstate_access:> (Event-p[RE])}
 fun ecox_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.cox).~xstate_access:> (Event-p[RE])}
 fun efrx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.frx).~xstate_access:> (Event-p[RE])
@@ -379,30 +385,36 @@ fun efrx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.frx).~x
 }
 fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}	
 
-fun eXSWriters_p[p: PTag->univ] : Event { eXSWrite + eXSRMW - p[RE]} // TODO the set of Writers might change when an event is delted? Or not?
 
+// In the following we are not interested in how the model looks after a pertubation but in how it changed. Our minimality criterion includes 
+// the notion of leakage staying "the same". For this, the following definitions are build from the original subconditions for leakage.
 
-
-
-
-// An intervening access writes to the same xstate location as the two instructions related by a com_arch edge
+// An intervening access that causes leakage between e and e' stays the same if there is also the same com_arch edge in the perturbed model 
+// between e and e' as well as the same medling event e''. 
+// NOTE: We could use and instead of or in the second part of this predicate defition and make same leakage even more restrictive. TODO
 pred intervening_access_same[e : Event, e' : Event, p: PTag->univ]{
-  e->e' in com_arch implies 
- {some e'' : Event | disj[e'',e] and disj[e'',e'] 
+  intervening_access[e,e']
+implies( 
+ {some e'' : Event | 
+  // e'' is an intervening event
+  disj[e'',e] and disj[e'',e'] 
+  and e->e'' not in  ^com_arch and e''->e' in ecomx 
+  and e'' in eXSWriters
+  // e'' is also an intervening event in the perturbed model
   and ((e''->e' in erfx implies e''->e' in erfx_p[p])
     or (e''->e' in ecox implies e''->e' in ecox_p[p])
     or (e''->e' in efrx implies e''->e' in efrx_p[p]))
-  and (e'' in eXSWriters implies e'' in eXSWriters_p[p])
-  and (e->e'' not in  ^com_arch implies  e->e'' not in  ^(com_arch_p[p]))
+  and  e'' in eXSWriters_p[p]
+  and (e->e'' not in  ^(com_arch_p[p]))
  }
-and 
-(e->e' in rf implies e->e' in rf_p[p])
-and 
+and
+((e->e' in rf implies e->e' in rf_p[p])
+or 
 (e->e' in co implies e->e' in co_p[p])
-and 
+or 
 (e->e' in fr implies e->e' in fr_p[p])
-and 
-(e->e' in rf_init implies e->e' in rf_init_p[p])
+or 
+(e->e' in rf_init implies e->e' in rf_init_p[p])))
 }
 
 // Whenever there is no corresponding comx edge for its respective com counterpart, the architectural communication is inconsistent with the extra-architecural communication
@@ -417,11 +429,11 @@ pred com_comx_consistent_same[e : Event, e' : Event, p: PTag->univ]{
 pred leakage_different[p: PTag->univ] 
 {all e,e' : Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
 
-//TODO: Check what this does if there is intervening access and com_comx_inconsistency.
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SECTION 6: Run Alloy
+// SECTION 8: Run Alloy
 
+// We are only interested in minimal tests that contain leakage. Note however, that we are using a slight overapproximation above. Therefore, the 
+// set might contain a very small number of tests that are not fully minimal. 
 let interesting_not_axiom{
   leakage
 
@@ -430,10 +442,20 @@ let interesting_not_axiom{
   all e: Event | leakage_different[RE->e]
 }
 
-run leakage1 {
-  interesting_not_axiom[] and #Event > 3 and #leak=1
-} for 4
+// Find tests that contain leakage but were sorted out because they are not minimal
+run test0{
+  leakage and not interesting_not_axiom[] and #Event = 3
+} for 3
 
+// Find tests that are minimal with respect to leakage
+run test1{
+  interesting_not_axiom[] and #Event = 2
+} for 2
+
+// Find tests that contain leakage and might be minimal with respect to leakage or not.
+run test2 {
+  leakage and #Event = 2
+} for 2
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =Alloy shortcuts=
@@ -462,10 +484,3 @@ pred event_transients[e: Event] { e in transient_events }	// the event does not 
 pred po_tc_p[e : Event, e' : Event, p: PTag->univ] { e->e' in ^(po_p[p]) }	// e happens before e' in program order
 pred tfo_tc_p[e: Event, e': Event, p: PTag->univ] { e->e' in ^(tfo_p[p]) }	// e happens before e' in transient fetch order
 pred same_thread_p[e : Event, e' : Event, p: PTag->univ] { e->e' in (iden + ^(tfo_p[p]) + ^~(tfo_p[p]))}	// both events are in the same thread
-
-// There are three cases why an fr edge might exist
-// 1. fr edge outgoing from an event that reads from initial state 
-// 2. fr edge between two events that are connected both by rf and co
-// 3. fr edge because there is a ~rf.co path that uses an event distinct from start and end events of the fr edge
-// In case 1 and 2, deleting an endpoint of an fr edge causes deleting the fr edge itself
-// In case 3, the edge is additionally deleted if the event in the middle is deleted.
