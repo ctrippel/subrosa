@@ -107,7 +107,7 @@ fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initia
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
 fact rf_init_total	{all e : (Read+CacheFlush) | 
-						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] => e in (rf_init.Event+Event.rf_init)}
+						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] implies e in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
@@ -192,7 +192,6 @@ fun frx : XSAccess->XSAccess {
   +
   ((XSReaders - (XSWriters.rfx)) <: (xstate.~xstate) :> XSWriters)  // and all events that read from the initial state of the xstate element they access
 }
-fact constrain_frx { frx in XSReaders->XSWriters }
 
 // If an instruction acts as a XRMW, i.e. both as a XRead and a XWrite, the XRead should happen before the XWrite, i.e. they should not be reordered. 
 // This means that the XRead has to read either from initial state or from another XWrite that happens before the XWrite that is part of the XRMW. 
@@ -209,6 +208,7 @@ fact po_in_tfo { po in ^tfo }	// po is a subset of ^tfo
 fact same_addr_in_same_xstate { address.~address in xstate_access.(xstate.~xstate).~xstate_access }		// same address events are also same state events
 
 // committed events are events that are either related by po with other events or have an incoming or outgoing rf or fr edge
+// TODO: why are co edges not included
 // Note that this definition does not work for one special cases (only one thread with a single instruction in it), these cases 
 // can be ommitted safely though.
 fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }
@@ -229,7 +229,7 @@ pred initialization_access[e : Event]
 // it is the first acces if there is no other initialization access that happens earlier in tfo order
 pred first_initialization_access[e : Event] 
   { initialization_access[e] and 
-  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] => tfo_tc[e,e']}}
+  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] implies tfo_tc[e,e']}}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
