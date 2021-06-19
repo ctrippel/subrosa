@@ -366,12 +366,12 @@ pred initialization_access_p[e : Event,p: PTag->univ]
   {all e' : (Write-p[RE]) | (disj[e,e'] and event_commits_p[e',p]) implies not(tfo_tc_p[e',e,p] and same_address[e,e'])}}
 
 fun first_initialization_access_in_set_p [events : set Event,p: PTag->univ] : Event{
-{e : Event |  initialization_access_p[e,p] and 
+{e : Event |  initialization_access_p[e,p] and //TODO: shouldn't this be events?
 {all e' : events | (disj[e,e'] and e.address = e'.address  and initialization_access_p[e',p] and same_thread_p[e,e',p]  implies tfo_tc_p[e,e',p])}}
 }
 
 //committed events
-pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events }
+pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events } //TODO: Why isn't this committed_events_p[p]?
 fun committed_events_p[p: PTag->univ] : Event { po_p[p].Event + Event.(po_p[p]) + Event.(rf_p[p]+fr_p[p]+~(rf_p[p])+~(fr_p[p])) }
 fun eXSWriters_p[p: PTag->univ] : Event { eXSWrite + eXSRMW - p[RE]}
 
