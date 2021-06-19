@@ -317,16 +317,26 @@ fact {consistency_predicate & confidentiality_predicate}*/
 // SECTION 7: Pertubations
 // =Model of the memory, under perturbation=
 
-//TODO: delete speculation primitive, all speculative executed instructions should be deleted
-//TODO: Check if Spectre v4 could be the result of deleting one element getting a new frx edge
+// If a speculation primitive (SP) is deleted all instructions induced by it are deleted as well
+fun speculation_primitive : Event {po.Event & Event.tfo - Event.po}
+//TODO: make more efficient
+fun speculation_origin[e: Event] : Event {{e' : Event | event_transients[e'] and e->e' in ^tfo and e in speculation_primitive
+												  and not {some e'':Event | e->e'' in ^po and e''->e' in ^tfo and e'' in speculation_primitive}}}
+fun Event_p[p: PTag->univ] : Event{Event - p[RE] - speculation_origin[p[RE]] }
+
 
 //ASSUMPTION: Do not introduce new rf or rfx edges after deleting an element. Instructions reading from a deleted event now read from initial memory
 // and xstate.
 //ASSUMPTION: No instruction will change it's XSEventType if an element is deleted
 
 //po and tfo
-fun po_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: po :> (Event-p[RE]) + (po.(p[RE]) -> p[RE].po)}
-fun tfo_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: tfo :> (Event-p[RE]) + (tfo.(p[RE]) -> p[RE].tfo)}
+//If a SP is deleted all po and tfo edges between induced instructions are deleted as well. Since there are no po edges in such a block
+//the element before the SP and the element after the SP in program order are now in po. For tfo this is not possible because p[RE].tfo 
+//is deleted if p[RE] is the SP.
+fun po_p[p: PTag->univ] : Event->Event {(Event_p[p])  <: po :> (Event_p[p]) + (po.(p[RE]) -> p[RE].po)}
+fun tfo_p[p: PTag->univ] : Event->Event {(Event_p[p])  <: tfo :> (Event_p[p]) + 
+{e,e' : Event | (e in speculation_primitive implies e->e' in {(tfo.(p[RE]) -> p[RE].po)})
+               and (e not in speculation_primitive implies e->e' in {(tfo.(p[RE]) -> p[RE].tfo)})}}
 
 //com edges
 // Accoring to our minimalisation criterion we won't try to delete instructions that are involved in a leakage relation. There should be no new leakage that is 
@@ -335,6 +345,7 @@ fun tfo_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: tfo :> (Event-p[RE]) 
 // endpoints is deleted completley. This works because we assume that if a Write that sources a Read is deleted that then the Read reads from initial state 
 // instead. This is always possible since the intial state could have been the value that was written by the deleted Write. If the Read is deleted then there is 
 // no rf edge by definition.
+// SP: We do not need to worry about instruction in the window of speculation of a deleted SP since they cannot be involved in com edges
 fun rf_p[p: PTag->univ] : Write->Read { (Write - p[RE]) <: rf :> (Read - p[RE])}
 // For co edges the transitive structure allows the removal of an instruction with ease.
 // In prior work ^co was used here because the authors did not insert that co is transitive.
@@ -357,8 +368,9 @@ fun com_arch_p[p: PTag->univ] : MemoryEvent->MemoryEvent { rf_init_p[p] + com_p[
 // be changed. Otherwise, the rf_init edge can just be deleted.
 // However, if a rf edge is deleted but not the Read it will also read from initial state. 
 // Thus, it becomes an initialisation access and might even be the first initialization access.
+// SP: instructions in the window of speculation cannot be involved in rf_init edges since they are deleted
 fun rf_init_p[p: PTag->univ] : MemoryEvent->MemoryEvent { 
-  {{first_initialization_access_in_set_p [Event-p[RE],p]} <:Event->Event:> {Event.rf_init-p[RE]} - iden}
+  {{first_initialization_access_in_set_p [Event_p[p],p]} <:Event->Event:> {Event.rf_init-p[RE]-speculation_origin[p[RE]] } - iden}
 }
 
 pred initialization_access_p[e : Event,p: PTag->univ]
@@ -366,21 +378,21 @@ pred initialization_access_p[e : Event,p: PTag->univ]
   {all e' : (Write-p[RE]) | (disj[e,e'] and event_commits_p[e',p]) implies not(tfo_tc_p[e',e,p] and same_address[e,e'])}}
 
 fun first_initialization_access_in_set_p [events : set Event,p: PTag->univ] : Event{
-{e : Event |  initialization_access_p[e,p] and 
+{e : Event |  initialization_access_p[e,p] and //TODO: shouldn't this be events?
 {all e' : events | (disj[e,e'] and e.address = e'.address  and initialization_access_p[e',p] and same_thread_p[e,e',p]  implies tfo_tc_p[e,e',p])}}
 }
 
 //committed events
-pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events }
+pred event_commits_p[e: Event,p: PTag->univ] { e in committed_events } //TODO: Why isn't this committed_events_p[p]?
 fun committed_events_p[p: PTag->univ] : Event { po_p[p].Event + Event.(po_p[p]) + Event.(rf_p[p]+fr_p[p]+~(rf_p[p])+~(fr_p[p])) }
 fun eXSWriters_p[p: PTag->univ] : Event { eXSWrite + eXSRMW - p[RE]}
 
 //comx edges
 // the same assumptions are in place as for com edges. Since there is no degree of freedom for frx edges the definition does not need to check 
 // whether an instruction is committed or not
-fun erfx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.rfx).~xstate_access:> (Event-p[RE])}
-fun ecox_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.cox).~xstate_access:> (Event-p[RE])}
-fun efrx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.frx).~xstate_access:> (Event-p[RE])
+fun erfx_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.rfx).~xstate_access:> (Event_p[p])}
+fun ecox_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.cox).~xstate_access:> (Event_p[p])}
+fun efrx_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.frx).~xstate_access:> (Event_p[p])
 +  (p[RE].erfx) <: (xstate_access.frx).~xstate_access :> (eXSWriters_p[p])
 }
 fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}	
