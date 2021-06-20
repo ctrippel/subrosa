@@ -300,7 +300,7 @@ pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_sou
 
 // Data leakage occurs because of addr dependencies
 pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr /*and not leakage_is_benign*/}
-fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
+//fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 6: Consistency and Confidentialiy predicate
@@ -413,6 +413,7 @@ implies(
   and e->e'' not in  ^com_arch and e''->e' in ecomx 
   and e'' in eXSWriters
   // e'' is also an intervening event in the perturbed model
+  and e'' in Event_p[p] //e'' is not deleted because it is a SP or in a window of a SP, TODO do we need this, we did not do it before
   and ((e''->e' in erfx implies e''->e' in erfx_p[p])
     or (e''->e' in ecox implies e''->e' in ecox_p[p])
     or (e''->e' in efrx implies e''->e' in efrx_p[p]))
@@ -439,7 +440,13 @@ pred com_comx_consistent_same[e : Event, e' : Event, p: PTag->univ]{
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
 pred leakage_different[p: PTag->univ] 
-{all e,e' : Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
+{all e,e',s : Event | data_leakage2[s,e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
+
+pred data_leakage2[s:Event, e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])
+															and disj[s,e] and disj[s,e'] and s = (e.(~(^erfx))).~addr
+															and s.address != e.address and s.address != e'.address}
+pred data_leakage2 {some s, e, e' : Event | data_leakage2[s,e,e']}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 8: Run Alloy
@@ -447,7 +454,7 @@ pred leakage_different[p: PTag->univ]
 // We are only interested in minimal tests that contain leakage. Note however, that we are using a slight overapproximation above. Therefore, the 
 // set might contain a very small number of tests that are not fully minimal. 
 let interesting_not_axiom{
-  leakage
+  data_leakage2
 
   // All events must be relevant and minimal
   // Minimal: Every relaxation removes all original leakage from the program
@@ -455,9 +462,9 @@ let interesting_not_axiom{
 }
 
 // Find tests that contain leakage but were sorted out because they are not minimal
-run test0{
-  leakage and not interesting_not_axiom[] and #Event = 3
-} for 3
+/*run test0{
+  data_leakage2 and not interesting_not_axiom[] and #Event = 3
+} for 3*/
 
 // Find tests that are minimal with respect to leakage
 run test1{
