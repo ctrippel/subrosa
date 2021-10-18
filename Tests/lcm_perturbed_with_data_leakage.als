@@ -1,4 +1,4 @@
-module lcm_perturbed
+module lcm_perturbed_with_data_leakage.als
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  Synthesizing a Suite of Comprehensive Litmus Tests
@@ -407,7 +407,7 @@ fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}
 pred intervening_access_same[e : Event, e' : Event, p: PTag->univ]{
   intervening_access[e,e']
 implies( 
- {some e'' : Event |
+ {some e'' : Event | 
   // e'' is an intervening event
   disj[e'',e] and disj[e'',e'] 
   and e->e'' not in  ^com_arch and e''->e' in ecomx 
@@ -440,7 +440,12 @@ pred com_comx_consistent_same[e : Event, e' : Event, p: PTag->univ]{
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
 pred leakage_different[p: PTag->univ] 
-{all e,e': Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
+{all e,e',s : Event | data_leakage2[s,e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
+
+pred data_leakage2[s:Event, e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])
+															and disj[s,e] and disj[s,e'] and s = (e.(~(^erfx))).~addr
+															and s.address != e.address and s.address != e'.address}
+pred data_leakage2 {some s, e, e' : Event | data_leakage2[s,e,e']}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -449,7 +454,7 @@ pred leakage_different[p: PTag->univ]
 // We are only interested in minimal tests that contain leakage. Note however, that we are using a slight overapproximation above. Therefore, the 
 // set might contain a very small number of tests that are not fully minimal. 
 let interesting_not_axiom{
-  leakage
+  data_leakage2
 
   // All events must be relevant and minimal
   // Minimal: Every relaxation removes all original leakage from the program
@@ -457,19 +462,19 @@ let interesting_not_axiom{
 }
 
 // Find tests that contain leakage but were sorted out because they are not minimal
-/*run test0{
-  leakage and not interesting_not_axiom[] and #Event = 3
-} for 3*/
+run test0{
+  data_leakage2 and not interesting_not_axiom[] and #Event = 3
+} for 3
 
 // Find tests that are minimal with respect to leakage
 run test1{
-  interesting_not_axiom[] and #Event = 4
-} for 4
+  interesting_not_axiom[] and #Event = 6
+} for 6
 
 // Find tests that contain leakage and might be minimal with respect to leakage or not.
 run test2 {
-  leakage and #Event = 4
-} for 4
+  data_leakage and #Event = 6
+} for 6
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =Alloy shortcuts=

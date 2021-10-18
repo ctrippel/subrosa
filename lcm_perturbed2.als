@@ -1,4 +1,4 @@
-module lcm_perturbed
+module lcm_perturbed2
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  Synthesizing a Suite of Comprehensive Litmus Tests
@@ -300,7 +300,7 @@ pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_sou
 
 // Data leakage occurs because of addr dependencies
 pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr /*and not leakage_is_benign*/}
-//fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
+fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 6: Consistency and Confidentialiy predicate
@@ -317,26 +317,16 @@ fact {consistency_predicate & confidentiality_predicate}*/
 // SECTION 7: Pertubations
 // =Model of the memory, under perturbation=
 
-// If a speculation primitive (SP) is deleted all instructions induced by it are deleted as well
-fun speculation_primitive : Event {po.Event & Event.tfo - Event.po}
-//TODO: make more efficient
-fun speculation_origin[e: Event] : Event {{e' : Event | event_transients[e'] and e->e' in ^tfo and e in speculation_primitive
-												  and not {some e'':Event | e->e'' in ^po and e''->e' in ^tfo and e'' in speculation_primitive}}}
-fun Event_p[p: PTag->univ] : Event{Event - p[RE] - speculation_origin[p[RE]] }
-
+//TODO: delete speculation primitive, all speculative executed instructions should be deleted
+//TODO: Check if Spectre v4 could be the result of deleting one element getting a new frx edge
 
 //ASSUMPTION: Do not introduce new rf or rfx edges after deleting an element. Instructions reading from a deleted event now read from initial memory
 // and xstate.
 //ASSUMPTION: No instruction will change it's XSEventType if an element is deleted
 
 //po and tfo
-//If a SP is deleted all po and tfo edges between induced instructions are deleted as well. Since there are no po edges in such a block
-//the element before the SP and the element after the SP in program order are now in po. For tfo this is not possible because p[RE].tfo 
-//is deleted if p[RE] is the SP.
-fun po_p[p: PTag->univ] : Event->Event {(Event_p[p])  <: po :> (Event_p[p]) + (po.(p[RE]) -> p[RE].po)}
-fun tfo_p[p: PTag->univ] : Event->Event {(Event_p[p])  <: tfo :> (Event_p[p]) + 
-{e,e' : Event | (e in speculation_primitive implies e->e' in {(tfo.(p[RE]) -> p[RE].po)})
-               and (e not in speculation_primitive implies e->e' in {(tfo.(p[RE]) -> p[RE].tfo)})}}
+fun po_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: po :> (Event-p[RE]) + (po.(p[RE]) -> p[RE].po)}
+fun tfo_p[p: PTag->univ] : Event->Event {(Event-p[RE])  <: tfo :> (Event-p[RE]) + (tfo.(p[RE]) -> p[RE].tfo)}
 
 //com edges
 // Accoring to our minimalisation criterion we won't try to delete instructions that are involved in a leakage relation. There should be no new leakage that is 
@@ -345,7 +335,6 @@ fun tfo_p[p: PTag->univ] : Event->Event {(Event_p[p])  <: tfo :> (Event_p[p]) +
 // endpoints is deleted completley. This works because we assume that if a Write that sources a Read is deleted that then the Read reads from initial state 
 // instead. This is always possible since the intial state could have been the value that was written by the deleted Write. If the Read is deleted then there is 
 // no rf edge by definition.
-// SP: We do not need to worry about instruction in the window of speculation of a deleted SP since they cannot be involved in com edges
 fun rf_p[p: PTag->univ] : Write->Read { (Write - p[RE]) <: rf :> (Read - p[RE])}
 // For co edges the transitive structure allows the removal of an instruction with ease.
 // In prior work ^co was used here because the authors did not insert that co is transitive.
@@ -368,9 +357,8 @@ fun com_arch_p[p: PTag->univ] : MemoryEvent->MemoryEvent { rf_init_p[p] + com_p[
 // be changed. Otherwise, the rf_init edge can just be deleted.
 // However, if a rf edge is deleted but not the Read it will also read from initial state. 
 // Thus, it becomes an initialisation access and might even be the first initialization access.
-// SP: instructions in the window of speculation cannot be involved in rf_init edges since they are deleted
 fun rf_init_p[p: PTag->univ] : MemoryEvent->MemoryEvent { 
-  {{first_initialization_access_in_set_p [Event_p[p],p]} <:Event->Event:> {Event.rf_init-p[RE]-speculation_origin[p[RE]] } - iden}
+  {{first_initialization_access_in_set_p [Event-p[RE],p]} <:Event->Event:> {Event.rf_init-p[RE]} - iden}
 }
 
 pred initialization_access_p[e : Event,p: PTag->univ]
@@ -390,9 +378,9 @@ fun eXSWriters_p[p: PTag->univ] : Event { eXSWrite + eXSRMW - p[RE]}
 //comx edges
 // the same assumptions are in place as for com edges. Since there is no degree of freedom for frx edges the definition does not need to check 
 // whether an instruction is committed or not
-fun erfx_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.rfx).~xstate_access:> (Event_p[p])}
-fun ecox_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.cox).~xstate_access:> (Event_p[p])}
-fun efrx_p[p: PTag->univ] : Event->Event {(Event_p[p]) <:(xstate_access.frx).~xstate_access:> (Event_p[p])
+fun erfx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.rfx).~xstate_access:> (Event-p[RE])}
+fun ecox_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.cox).~xstate_access:> (Event-p[RE])}
+fun efrx_p[p: PTag->univ] : Event->Event {(Event-p[RE]) <:(xstate_access.frx).~xstate_access:> (Event-p[RE])
 +  (p[RE].erfx) <: (xstate_access.frx).~xstate_access :> (eXSWriters_p[p])
 }
 fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}	
@@ -407,13 +395,12 @@ fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}
 pred intervening_access_same[e : Event, e' : Event, p: PTag->univ]{
   intervening_access[e,e']
 implies( 
- {some e'' : Event |
+ {some e'' : Event | 
   // e'' is an intervening event
   disj[e'',e] and disj[e'',e'] 
   and e->e'' not in  ^com_arch and e''->e' in ecomx 
   and e'' in eXSWriters
   // e'' is also an intervening event in the perturbed model
-  and e'' in Event_p[p] //e'' is not deleted because it is a SP or in a window of a SP, TODO do we need this, we did not do it before
   and ((e''->e' in erfx implies e''->e' in erfx_p[p])
     or (e''->e' in ecox implies e''->e' in ecox_p[p])
     or (e''->e' in efrx implies e''->e' in efrx_p[p]))
@@ -440,8 +427,7 @@ pred com_comx_consistent_same[e : Event, e' : Event, p: PTag->univ]{
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
 pred leakage_different[p: PTag->univ] 
-{all e,e': Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
-
+{all e,e' : Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 8: Run Alloy
@@ -457,19 +443,19 @@ let interesting_not_axiom{
 }
 
 // Find tests that contain leakage but were sorted out because they are not minimal
-/*run test0{
+run test0{
   leakage and not interesting_not_axiom[] and #Event = 3
-} for 3*/
+} for 3
 
 // Find tests that are minimal with respect to leakage
 run test1{
-  interesting_not_axiom[] and #Event = 4
-} for 4
+  interesting_not_axiom[] and #Event = 2
+} for 2
 
 // Find tests that contain leakage and might be minimal with respect to leakage or not.
 run test2 {
-  leakage and #Event = 4
-} for 4
+  leakage and #Event = 2
+} for 2
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =Alloy shortcuts=

@@ -1,5 +1,5 @@
 module Tests/regression_test_meltdown
-open lcm_skeleton as lcm
+open lcm_perturbed as lcm
 
 // Spectre v3 (Meltdown)
 //NOTE: There are two additional efrx loops that are not shown in the paper that would be ruled out in most consistency predicates.
@@ -23,7 +23,7 @@ fact{t1 && t2 && t3 && t4 && t5}
 //run{} for 4
 
 // Check if our model captures the leakage
-check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 4
+check {not {all e: Event | leakage_different[RE->e]}} for 4
 
 // Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
 //check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (com_comx_consistent[e,e'])}}} for 5

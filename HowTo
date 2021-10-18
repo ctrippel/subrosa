@@ -1,0 +1,2 @@
+java -cp AlloyAnalyzer/dist/alloy4.2.jar edu.mit.csail.sdg.alloy4whole.MainClass -f lcm_perturbed.als leakage1 > pertubation_result.out 
+

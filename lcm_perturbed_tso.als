@@ -304,13 +304,23 @@ pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~add
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 6: Consistency and Confidentialiy predicate
+// =TSO consistency predicate=
 
-// In this file we do not want to impose any consistency or confidentiality predicate
-/*pred consistency_predicate {}
-pred confidentiality_predicate {}
+fun rfi : MemoryEvent->MemoryEvent{{e, e' :MemoryEvent | e->e' in rf and same_thread[e,e']}}
+fun rfe: MemoryEvent->MemoryEvent { rf - rfi}
+fun ppo: MemoryEvent->MemoryEvent {^po & (Write->Write + Read->Write + Read->Read)}
 
-fact {consistency_predicate & confidentiality_predicate}*/
+//po_loc
+fun po_loc : MemoryEvent->MemoryEvent { ^po & address.~address }		// connects all same address events in program order
 
+pred sc_per_loc {acyclic[rf + co + fr + po_loc]}
+//We don't allow atomic rmw instructions. Thus, rmw_actomicity is not considered here.
+pred causality {acyclic[rfe + co + fr + ppo]} //+ mfence]}
+
+pred consistency_predicate {sc_per_loc and causality}
+//pred confidentiality_predicate {}
+
+fact consistency {consistency_predicate} //& confidentiality_predicate}*/
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -443,6 +453,17 @@ pred leakage_different[p: PTag->univ]
 {all e,e': Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
 
 
+//consistency predicate
+fun rfi_p[p: PTag->univ] : MemoryEvent->MemoryEvent{{e, e' :MemoryEvent | e->e' in rf_p[p] and same_thread_p[e,e',p]}}
+fun rfe_p[p: PTag->univ] : MemoryEvent->MemoryEvent { rf_p[p] - rf_p[p]}
+fun ppo_p[p: PTag->univ] : MemoryEvent->MemoryEvent {^(po_p[p]) & (Write->Write + Read->Write + Read->Read)}
+fun po_loc_p[p: PTag->univ] : MemoryEvent->MemoryEvent { ^(po_p[p]) & address.~address }
+
+pred sc_per_loc_p[p: PTag->univ] {acyclic[rf_p[p] + co_p[p] + fr_p[p] + po_loc_p[p]]}
+pred causality_p[p: PTag->univ] {acyclic[rfe_p[p] + co_p[p] + fr_p[p] + ppo_p[p]]} //+ mfence_p[p]]}
+
+pred consistency_predicate_p[p: PTag->univ] {sc_per_loc_p[p] and causality_p[p]}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 8: Run Alloy
 
@@ -453,7 +474,7 @@ let interesting_not_axiom{
 
   // All events must be relevant and minimal
   // Minimal: Every relaxation removes all original leakage from the program
-  all e: Event | leakage_different[RE->e]
+  all e: Event | leakage_different[RE->e] or not consistency_predicate_p[RE->e]
 }
 
 // Find tests that contain leakage but were sorted out because they are not minimal
