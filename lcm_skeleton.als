@@ -47,6 +47,8 @@ abstract sig MemoryEvent extends Event{		// set of instruction objects represent
 
 sig Read extends MemoryEvent {					// Read is a subset of MemoryEvents that is disjoint from Write and CacheFlush
   addr : set MemoryEvent,								// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
+  data : set MemoryEvent,								// data dependency relation, relates a Read to a Write whose value depends on the value read
+  control : set MemoryEvent,							// control dependency relation, relates a Read to instructions following a conditional branch whose condition involved the value read
   fr: set Write													// from-reads relation
 }
 
@@ -123,16 +125,11 @@ fact fr_max {fr in ~rf.co + (Read-Write.rf) <: address.~address :> Write}
 // If a Read has an outgoing fr edge it is committed and thus has to be connected to all subsequent Writes and not only to some
 fact fr_connect {all e : Read | all w : Write | (same_thread[e,w] and event_commits[e] and same_address[e,w]) implies e->w in fr}
 
-//dependencies (for now just consists of addr)
-fun dep : Read->MemoryEvent { addr }
+//dependencies
+fact data_domain {Event.data in Write}
+fact control_branch {#control > 0 implies {some b : Branch  |  control.Event->b in ^tfo and b->Event.control in ^tfo}}
+fun dep : Read->MemoryEvent { addr + control + data}
 fact dep_in_tfo { dep in ^tfo }
-
-//Performance optimizations
-// Events that do not access architectural state nor extra-architectural state are ommitted since they are not interesting to our analysis
-fact event_simplify {Event in xstate_access.XSAccess + MemoryEvent}
-// XSAccess that are not connected to any Event are ommitted
-fact xsaccess_simplify {XSAccess in Event.xstate_access}
-
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 3: Constrain leakage containment model relations
@@ -282,12 +279,25 @@ pred leakage_is_benign[e:Event,sink:Event] {e.address.privilege_domain=sink.addr
 pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_source[source,sink] /*and not leakage_is_benign*/}
 
 // Data leakage occurs because of addr dependencies
-pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ^~ecomx.~addr /*and not leakage_is_benign*/}
+pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ~^erfx.~addr /*and not leakage_is_benign*/}
 fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SECTION 6: Performance optimizations
+
+// Events that do not access architectural state nor extra-architectural state are ommitted since they are not interesting to our analysis
+pred event_simplify {Event in xstate_access.XSAccess + MemoryEvent}
+// XSAccess that are not connected to any Event are ommitted
+pred xsaccess_simplify {XSAccess in Event.xstate_access}
+//Data and control edges do not contribute to leakage in any way.
+pred delete_dep {no data and no control}
+
+//Performance optimization. If behavior is wanted to delete here.
+fact{event_simplify and xsaccess_simplify and delete_dep}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SECTION 6: Run Alloy
+// SECTION 7: Run Alloy
 
 //E.g., find models that feature leakage
 run{

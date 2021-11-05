@@ -11,17 +11,18 @@
    <type name="Branch"/>
    <type name="CacheFlush"/>
    <type name="Event"/>
+   <type name="Fence"/>
    <type name="Int"/>
    <type name="Jump"/>
    <type name="MemoryEvent"/>
    <type name="Read"/>
+   <type name="REG"/>
    <type name="String"/>
    <type name="univ"/>
    <type name="Write"/>
    <type name="XSEventType"/>
    <type name="seq/Int"/>
-   <set name="$e" type="Event"/>
-   <set name="$e&apos;" type="Event"/>
+   <set name="$committed_events" type="Event"/>
    <set name="$eXSRead" type="Event"/>
    <set name="$eXSRMW" type="Event"/>
    <set name="$eXSWrite" type="Event"/>
@@ -52,6 +53,7 @@
 <edge visible="no">
    <relation name="$com_arch"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
    <relation name="$comx"> <type name="XSAccess"/> <type name="XSAccess"/> </relation>
+   <relation name="$dep"> <type name="Read"/> <type name="MemoryEvent"/> </relation>
    <relation name="$ecomx"> <type name="Event"/> <type name="Event"/> </relation>
 </edge>
 
