@@ -201,6 +201,9 @@ fact xrmw_sc {xrmw in frx}
 //relate po and tfo
 fact po_in_tfo { po in ^tfo }	// po is a subset of ^tfo
 
+// A speculation primitive (SP) is an event that starts a speculative execution
+fun speculation_primitive : Event {Event.po & tfo.Event - po.Event}
+
 //MemoryEvents that modify the same address should modify the same xstate
 fact same_addr_in_same_xstate { address.~address in xstate_access.(xstate.~xstate).~xstate_access }		// same address events are also same state events
 
@@ -282,19 +285,26 @@ pred xstate_leakage[source:Event,sink:Event] {is_sink[sink] and is_candidate_sou
 pred data_leakage [e:Event,sink:Event]{is_sink[sink] and sink->e in ~^erfx.~addr /*and not leakage_is_benign*/}
 fun data_leak : Event -> set Event {{e,sink : Event| data_leakage[e,sink]}}
 
+// Some leakage is due to speculative execution
+pred speculative_leakage{speculation_primitive in leak.Event}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SECTION 6: Performance optimizations
+// SECTION 6: Performance optimizations and Options
 
 // Events that do not access architectural state nor extra-architectural state are ommitted since they are not interesting to our analysis
 pred event_simplify {Event in xstate_access.XSAccess + MemoryEvent}
 // XSAccess that are not connected to any Event are ommitted
 pred xsaccess_simplify {XSAccess in Event.xstate_access}
-//Data and control edges do not contribute to leakage in any way.
+// Data and control edges do not contribute to leakage in any way.
 pred delete_dep {no data and no control}
 
-//Performance optimization. If behavior is wanted to delete here.
+// Performance optimization. If behavior is wanted to delete here.
 fact{event_simplify and xsaccess_simplify and delete_dep}
 
+// Turn off or on different speculation primitives
+//fact {#(speculation_primitive & Branch) = 0}
+//fact {#(speculation_primitive & Write) = 0}
+//fact {#(speculation_primitive & CacheFlush) = 0}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 7: Run Alloy
