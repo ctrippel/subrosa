@@ -24,9 +24,6 @@
    <type name="seq/Int"/>
    <set name="$committed_events" type="Event"/>
    <set name="$eXSRead" type="Event"/>
-   <set name="$eXSRMW" type="Event"/>
-   <set name="$eXSWrite" type="Event"/>
-   <set name="$transient_events" type="Event"/>
 </node>
 
 <node hideunconnected="no">
@@ -35,12 +32,8 @@
 
 <node showlabel="no">
    <set name="$eXSReaders" type="Event"/>
-   <set name="$eXSWriters" type="Event"/>
    <set name="$XSRead" type="XSAccess"/>
    <set name="$XSReaders" type="XSAccess"/>
-   <set name="$XSRMW" type="XSAccess"/>
-   <set name="$XSWrite" type="XSAccess"/>
-   <set name="$XSWriters" type="XSAccess"/>
 </node>
 
 <node visible="no">
@@ -51,10 +44,12 @@
 </node>
 
 <edge visible="no">
+   <relation name="$com"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
    <relation name="$com_arch"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
-   <relation name="$comx"> <type name="XSAccess"/> <type name="XSAccess"/> </relation>
-   <relation name="$dep"> <type name="Read"/> <type name="MemoryEvent"/> </relation>
-   <relation name="$ecomx"> <type name="Event"/> <type name="Event"/> </relation>
+   <relation name="$po_loc"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
+   <relation name="$ppo"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
+   <relation name="$ptfo"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
+   <relation name="$tfo_loc"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
 </edge>
 
 <edge visible="no" attribute="yes">
