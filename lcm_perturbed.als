@@ -395,7 +395,7 @@ fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}
 pred intervening_access_same[e : Event, e' : Event, p: PTag->univ]{
   intervening_access[e,e']
 implies( 
- {some e'' : Event | 
+ {some e'' : Event | //Might have to change this to all, because we want the same intervening event
   // e'' is an intervening event
   disj[e'',e] and disj[e'',e'] 
   and e->e'' not in  ^com_arch and e''->e' in ecomx 
