@@ -164,6 +164,8 @@ fun eXSWrite : Event { xstate_access.xstate_event_type.XWrite }
 fun eXSRMW : Event { xstate_access.xstate_event_type.XRead & xstate_access.xstate_event_type.XWrite}
 fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
+fun eXState : Event->XState { xstate_access.xstate }
+
 
 //constrain events
 fact constrain_write {Write in eXSRead + eXSRMW}						// Writes are always either reads or read modify write
@@ -305,6 +307,9 @@ fact{event_simplify and xsaccess_simplify and delete_dep}
 //fact {#(speculation_primitive & Branch) = 0}
 //fact {#(speculation_primitive & Write) = 0}
 //fact {#(speculation_primitive & CacheFlush) = 0}
+//fact {#(speculation_primitive & Jump) = 0}
+//fact {#(speculation_primitive & Read) = 0}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 7: Run Alloy
