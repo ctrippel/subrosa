@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view fontsize="16">
+
+<defaultnode/>
+
+<defaultedge/>
+
+<node>
+   <type name="Branch"/>
+   <type name="CacheFlush"/>
+   <type name="Event"/>
+   <type name="Fence"/>
+   <type name="Jump"/>
+   <type name="MemoryEvent"/>
+   <type name="Read"/>
+   <type name="REG"/>
+   <type name="univ"/>
+   <type name="Write"/>
+   <type name="XSEventType"/>
+   <type name="seq/Int"/>
+   <set name="$eXSRead" type="Event"/>
+   <set name="$eXSWrite" type="Event"/>
+   <set name="$XSRMW" type="XSAccess"/>
+   <set name="$XSWrite" type="XSAccess"/>
+   <set name="$XSWriters" type="XSAccess"/>
+</node>
+
+<node showlabel="no">
+   <set name="$XSRead" type="XSAccess"/>
+   <set name="$XSReaders" type="XSAccess"/>
+</node>
+
+<node visible="no">
+   <type name="Address"/>
+   <type name="Int"/>
+   <type name="String"/>
+   <type name="XRead"/>
+   <type name="XState"/>
+   <type name="XWrite"/>
+</node>
+
+<node visible="no" hideunconnected="no">
+   <type name="XSAccess"/>
+</node>
+
+<node visible="no" showlabel="no">
+   <set name="$committed_events" type="Event"/>
+   <set name="$eXSReaders" type="Event"/>
+   <set name="$eXSRMW" type="Event"/>
+   <set name="$eXSWriters" type="Event"/>
+</node>
+
+<edge visible="no">
+   <relation name="$com"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
+   <relation name="$com_arch"> <type name="MemoryEvent"/> <type name="MemoryEvent"/> </relation>
+   <relation name="$comx"> <type name="XSAccess"/> <type name="XSAccess"/> </relation>
+   <relation name="$ecomx"> <type name="Event"/> <type name="Event"/> </relation>
+   <relation name="$xrmw"> <type name="XSAccess"/> <type name="XSAccess"/> </relation>
+</edge>
+
+<edge visible="no" attribute="no">
+   <relation name="xstate_event_type"> <type name="XSAccess"/> <type name="XSEventType"/> </relation>
+</edge>
+
+<edge visible="no" attribute="yes">
+   <relation name="$eXState"> <type name="Event"/> <type name="XState"/> </relation>
+   <relation name="address"> <type name="MemoryEvent"/> <type name="Address"/> </relation>
+   <relation name="xstate"> <type name="XSAccess"/> <type name="XState"/> </relation>
+</edge>
+
+<edge visible="no" layout="no" attribute="no">
+   <relation name="xstate_access"> <type name="Event"/> <type name="XSAccess"/> </relation>
+</edge>
+
+</view>
+
+</alloy>
