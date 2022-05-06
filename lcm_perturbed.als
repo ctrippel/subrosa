@@ -21,32 +21,32 @@ fun no_p : PTag-> univ { // no_p - constant for no perturbation
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 1: Specify relevant sets (e.g., Address, Event, Read, Write, Fence) and relations (address, po, addr, rf, co)
 
-sig Address {													// set of physical address objects representing shared memory locations
+sig Address {							// set of physical address objects representing shared memory locations
   //privilege_domain: one PrivilegeDomain			// OPTIONAL, uncomment to use
-																	// there is no leakage between members of the same privilige domain
+								// there is no leakage between members of the same privilige domain
 }
 
-sig XState { }												// extra-architectural state locations
+sig XState { }							// extra-architectural state locations
 
-abstract sig Event {										// set of instruction objects representing assembly language program instructions
-  po: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
-																	// to the instruction sequencing of committed instructions
-  tfo: lone Event,											// set of tuples of the form (Event, Event) which map each instruction object in Event 
-																	// to the sequence of instructions in which they began execution
-  xstate_access: lone XSAccess						// extra-architectural state accesses
+abstract sig Event {						// set of instruction objects representing assembly language program instructions
+  po: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
+								// to the instruction sequencing of committed instructions
+  tfo: lone Event,						// set of tuples of the form (Event, Event) which map each instruction object in Event 
+								// to the sequence of instructions in which they began execution
+  xstate_access: lone XSAccess					// extra-architectural state accesses
 }
 
-abstract sig XSEventType { }						// extra-architectural state types
-one sig XRead extends XSEventType {}			// xstate access can behave as "read"
-one sig XWrite extends XSEventType { }		// and/or "write"
+abstract sig XSEventType { }					// extra-architectural state types
+one sig XRead extends XSEventType {}				// xstate access can behave as "read"
+one sig XWrite extends XSEventType { }				// and/or "write"
 
 sig XSAccess{
-  xstate: one XState,										// set of tuples of the form (XStateAccess, XState) which map each XStateAccess to the one
-																	// XState element that it accesses.
-  xstate_event_type: some XSEventType,			// set of tuples of the form (XStateAccess, XSEventType) which map each XStateAccess to the 
-																	// behavior it shows when accessing the xstate specified through xstate_access.
-  rfx: set XSAccess,											// rf lifted to Events
-  cox: set XSAccess											// co lifted to Events
+  xstate: one XState,						// set of tuples of the form (XStateAccess, XState) which map each XStateAccess to the one
+								// XState element that it accesses.
+  xstate_event_type: some XSEventType,				// set of tuples of the form (XStateAccess, XSEventType) which map each XStateAccess to the 
+								// behavior it shows when accessing the xstate specified through xstate_access.
+  rfx: set XSAccess,						// rf lifted to Events
+  cox: set XSAccess						// co lifted to Events
 }
 
 fun xrmw : XSAccess->XSAccess {					// In case that a XSAccess has both type XRead and XWrite it is an XRMW
@@ -54,19 +54,19 @@ fun xrmw : XSAccess->XSAccess {					// In case that a XSAccess has both type XRe
   & iden
 }
 
-abstract sig MemoryEvent extends Event{		// set of instruction objects representing assembly language program instructions which access architectural state
-  address: one Address,									// set of tuples of the form (Event, Address) which map each MemoryEvent to the one Address that it accesses
-  rf_init : set MemoryEvent								// memory accesses might read from the initial state of the memory
+abstract sig MemoryEvent extends Event{				// set of instruction objects representing assembly language program instructions which access architectural state
+  address: one Address,						// set of tuples of the form (Event, Address) which map each MemoryEvent to the one Address that it accesses
+  rf_init : set MemoryEvent					// memory accesses might read from the initial state of the memory
 }
 
 sig Read extends MemoryEvent {					// Read is a subset of MemoryEvents that is disjoint from Write and CacheFlush
-  addr : set MemoryEvent,								// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
-  fr: set Write													// from-reads relation
+  addr : set MemoryEvent,					// address dependency relation, relates a Read to a po-subsequent MemoryEvent when the value accessed by that event syntactically depends on the value returned by the Read
+  fr: set Write							// from-reads relation
 }
 
 sig Write extends MemoryEvent {					// Write is a subset of MemoryEvents that is disjoint from Read
-  rf: set Read,												// reads-from relation, relates each Write to all same-address Reads it sources
-  co: set Write												// coherence-order relation, relates all Writes to all Writes that follow it in coherence order 
+  rf: set Read,							// reads-from relation, relates each Write to all same-address Reads it sources
+  co: set Write							// coherence-order relation, relates all Writes to all Writes that follow it in coherence order 
 }
 
 // Additional Events
@@ -77,10 +77,10 @@ fact branch_has_xstate {all b : Branch | one {b.xstate_access}}
 sig Jump extends Event {}							// Jumps are Events that access xstate
 fact branch_has_xstate {all j : Jump | one {j.xstate_access}}
 
-abstract sig Fence extends Event { }			// Fences are Events that do not access xstate
+abstract sig Fence extends Event { }						// Fences are Events that do not access xstate
 fact fence_has_no_xstate {Fence.xstate_access = none}
 
-sig CacheFlush extends MemoryEvent { }		// CacheFlushes are special Memory Events
+sig CacheFlush extends MemoryEvent { }						// CacheFlushes are special Memory Events
 fact cf_has_xstate {all c : CacheFlush | one {c.xstate_access}}
 
 sig REG extends Read {}								// REG operations are special reads that access xstate but don't share a memory location or xstate with other instructions
@@ -95,12 +95,12 @@ fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.
 
 //po
 fact po_acyclic { acyclic[po] }							// po is acyclic
-fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 1 events by po
+fact po_prior { all e : Event | lone e.~po }					// all events are related to 0 or 1 events by po
 // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
 fact po_connect { all e1, e2 : Event |  (e1->e2 in ^tfo and e1 in Event.~po and e2 in Event.po) implies (e1->e2 in ^po+^~po)}
 
 //com
-fun com : MemoryEvent->MemoryEvent { rf + fr + co }	// com edges are all rf, fr and co edges
+fun com : MemoryEvent->MemoryEvent { rf + fr + co }		// com edges are all rf, fr and co edges
 fact com_in_same_addr { com in address.~address }		// com edges only relate same address instructions
 
 //coherence-order
@@ -157,7 +157,7 @@ fact xstate_simplify {XState in XSAccess.xstate}
 fact xstate_access_inj {xstate_access.~xstate_access in iden}	// Each XSAccess can only be related to one instruction
 
 //tfo
-fact tfo_acyclic { acyclic[tfo] }						// tfo is acyclic
+fact tfo_acyclic { acyclic[tfo] }			// tfo is acyclic
 fact tfo_prior { all e : Event | lone e.~tfo }		// all events are related to 0 or 1 events by tfo
 
 //comx
@@ -165,9 +165,9 @@ fun comx : XSAccess -> XSAccess { rfx + frx + cox }	// comx edges are all rfx, f
 fact comx_in_same_xstate { comx in xstate.~xstate }	// comx edges can only relate instructions with the same xstate
 
 //lifting comx functions to event level
-fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}		// rfx on Events
-fun ecox : Event->Event {(xstate_access.cox).~xstate_access}		// cox on Events
-fun efrx : Event->Event {(xstate_access.frx).~xstate_access}		// frx on Events
+fun erfx : Event->Event {(xstate_access.rfx).~xstate_access}	// rfx on Events
+fun ecox : Event->Event {(xstate_access.cox).~xstate_access}	// cox on Events
+fun efrx : Event->Event {(xstate_access.frx).~xstate_access}	// frx on Events
 fun ecomx: Event->Event {(xstate_access.comx).~xstate_access}	// comx on Events
 
 //helper functions
@@ -185,20 +185,20 @@ fun eXSReaders : Event { eXSRead+ eXSRMW }
 fun eXSWriters : Event { eXSWrite + eXSRMW }
 
 //constrain events
-fact constrain_write {Write in eXSRead + eXSRMW}						// Writes are always either reads or read modify write
+fact constrain_write {Write in eXSRead + eXSRMW}			// Writes are always either reads or read modify write
 fact constrain_cacheFlush {CacheFlush in eXSRead + eXSRMW}		// CacheFlushs are always either reads or read modify write
-fact constrain_read {Read in eXSRead + eXSRMW}						// Reads are always either reads or read modify write
-fact constrain_branch {Branch in eXSRead + eXSRMW}					// Branch are always either reads or read modify write
+fact constrain_read {Read in eXSRead + eXSRMW}				// Reads are always either reads or read modify write
+fact constrain_branch {Branch in eXSRead + eXSRMW}			// Branch are always either reads or read modify write
 
 //rfx
-fact constrain_rfx { rfx in XSWriters->XSReaders } 						// rfx edges relates instruction that write to xstate to instructions that read from it 
-fact lone_source_writex { rfx.~rfx in iden }									// each instruction has at most a single source over rfx
+fact constrain_rfx { rfx in XSWriters->XSReaders } 			// rfx edges relates instruction that write to xstate to instructions that read from it 
+fact lone_source_writex { rfx.~rfx in iden }				// each instruction has at most a single source over rfx
 
 //cox
-fact cox_transitive { transitive[cox] }											// cox edges are transitive
+fact cox_transitive { transitive[cox] }					// cox edges are transitive
 fact cox_total { all s: XState | total[cox, s.~xstate & XSWriters] }	// cox is total 
-fact constrain_cox { cox in XSWriters->XSWriters }						// cox related instructions that write to xstate to instructions that write to it 
-fact cox_acyclic { acyclic[cox] }													// cox is acyclic
+fact constrain_cox { cox in XSWriters->XSWriters }			// cox related instructions that write to xstate to instructions that write to it 
+fact cox_acyclic { acyclic[cox] }					// cox is acyclic
 
 //frx
 // in contrast to fr edges, frx edges can be uniquely given by a function that comprises:
