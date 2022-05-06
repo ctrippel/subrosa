@@ -266,6 +266,33 @@ fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }	//
 
 // A candidate source is always defined with respect to the sink(s) it leaks too. Any instruction related to the sink by comx is a candidate of a source for leakage. 
 pred is_candidate_source [e:Event,sink:Event]{disj[e,sink] and is_sink[sink] and sink->e in ^~ecomx}
+// An intervening access writes to the same xstate location as the two instructions related by a com_arch edge
+pred intervening_access[e1 : Event, e2 : Event]{
+  e1->e2 in com_arch and 
+ {some e3:Event| disj[e3,e1] and disj[e3,e2] 
+  and e1->e3 not in  ^com_arch and e3->e1 in ecomx 
+  and e3 in eXSWriters}
+}
+
+// Whenever there is no corresponding comx edge for its respective com counterpart, the architectural communication is inconsistent with the extra-architecural communication
+pred com_comx_consistent[e1 : Event, e2 : Event]{
+  (e1->e2 in rf implies e1->e2 in erfx)
+  and (e1->e2 in co implies e1->e2 in ecox)
+  and (e1->e2 in fr implies e1->e2 in efrx)
+  and (e1->e2 in rf_init implies e1->e2 in erfx)
+}
+
+// leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
+pred leakage[e1 : Event, e2 : Event] {disj[e1,e2]  and (not com_comx_consistent[e1,e2] or intervening_access[e1,e2])}
+pred leakage {some e1, e2 : Event | leakage[e1,e2]}
+fun leak : Event -> set Event {{e1,e2 : Event| leakage[e1,e2]}}
+
+// =Sink and Source instructions=
+pred is_sink [e1: Event] {some e2 : Event | leakage[e1,e2]}			// the sink is the instruction where information is leaked to
+fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }	// the sink instruction has to be a committed argument
+
+// A candidate source is always defined with respect to the sink(s) it leaks too. Any instruction related to the sink by comx is a candidate of a source for leakage. 
+pred is_candidate_source [e:Event,sink:Event]{disj[e,sink] and is_sink[sink] and sink->e in ^~ecomx}
 
 // =Privilege Domains=
 // OPTIONAL, uncomment to use. Also uncomment in Event, xstate_leakage and data_leakage
@@ -342,8 +369,8 @@ pred total[rel: (Event+XSAccess)->(Event+XSAccess), bag: (Event+XSAccess)] {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
 // program and transient fetch order
-pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e happens before e' in program order
-pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e happens before e' in transient fetch order
+pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e1 happens before e2 in program order
+pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e1 happens before e2 in transient fetch order
 pred same_address[e1 : Event, e2 : Event] { e1.address = e2.address }	// both events access the same adress
 pred same_xstate[e1 : Event, e2 : Event] {e1.xstate_access.xstate = e2.xstate_access.xstate}	// both events access the same xstate
 pred same_thread[e1 : Event, e2 : Event] { e1->e2 in (iden + ^tfo + ^~tfo)}	// both events are in the same thread

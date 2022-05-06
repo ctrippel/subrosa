@@ -413,8 +413,8 @@ pred consistency_predicate_p[p: PTag->univ] {sc_per_loc_p[p] and causality_p[p]}
 // In the following we are not interested in how the model looks after a pertubation but in how it changed. Our minimality criterion includes 
 // the notion of leakage staying "the same". For this, the following definitions are build from the original subconditions for leakage.
 
-// An intervening access that causes leakage between e and e' stays the same if there is also the same com_arch edge in the perturbed model 
-// between e and e' as well as the same medling event e''. 
+// An intervening access that causes leakage between e1 and e2 stays the same if there is also the same com_arch edge in the perturbed model 
+// between e1 and e2 as well as the same medling event e3. 
 // NOTE: We could use and instead of or in the second part of this predicate defition and make same leakage even more restrictive. TODO
 pred intervening_access_same[e1 : Event, e2 : Event, p: PTag->univ]{
   intervening_access[e1,e2]
@@ -496,8 +496,8 @@ pred total[rel: (Event+XSAccess)->(Event+XSAccess), bag: (Event+XSAccess)] {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
 // program and transient fetch order
-pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e happens before e' in program order
-pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e happens before e' in transient fetch order
+pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e1 happens before e2 in program order
+pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e1 happens before e2 in transient fetch order
 pred same_address[e1 : Event, e2 : Event] { e1.address = e2.address }	// both events access the same adress
 pred same_xstate[e1 : Event, e2 : Event] {e1.xstate_access.xstate = e2.xstate_access.xstate}	// both events access the same xstate
 pred same_thread[e1 : Event, e2 : Event] { e1->e2 in (iden + ^tfo + ^~tfo)}	// both events are in the same thread

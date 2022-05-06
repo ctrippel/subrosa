@@ -297,7 +297,7 @@ fun rfe: MemoryEvent->MemoryEvent { rf - rfi}
 fun rfxe: MemoryEvent->MemoryEvent { erfx - rfxi}
 fun ppo: MemoryEvent->MemoryEvent {^po & (Write->Write + Read->Write + Read->Read)}
 fun ptfo: MemoryEvent->MemoryEvent {^tfo & (Write->Write + Read->Write + Read->Read)}
-//fun mfence: Event->Event {{e,e':Event| all f: Fence| e->f in ^tfo and f->e' in ^tfo}} //TODO
+//fun mfence: Event->Event {{e1,e2:Event| all f: Fence| e1->f in ^tfo and f->e2 in ^tfo}} //TODO
 
 pred sc_per_loc {acyclic[rf + co + fr + po_loc]}
 //We don't allow atomic rmw instructions. Thus, rmw_actomicity is not considered here.
@@ -361,8 +361,8 @@ pred total[rel: (Event+XSAccess)->(Event+XSAccess), bag: (Event+XSAccess)] {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
 // program and transient fetch order
-pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e happens before e' in program order
-pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e happens before e' in transient fetch order
+pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e1 happens before e2 in program order
+pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e1 happens before e2 in transient fetch order
 pred same_address[e1 : Event, e2 : Event] { e1.address = e2.address }	// both events access the same adress
 pred same_xstate[e1 : Event, e2 : Event] {e1.xstate_access.xstate = e2.xstate_access.xstate}	// both events access the same xstate
 pred same_thread[e1 : Event, e2 : Event] { e1->e2 in (iden + ^tfo + ^~tfo)}	// both events are in the same thread
