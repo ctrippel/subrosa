@@ -97,7 +97,7 @@ fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.
 fact po_acyclic { acyclic[po] }							// po is acyclic
 fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 1 events by po
 // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
-fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)}
+fact po_connect { all e1, e2 : Event |  (e1->e2 in ^tfo and e1 in Event.~po and e2 in Event.po) implies (e1->e2 in ^po+^~po)}
 
 //com
 fun com : MemoryEvent->MemoryEvent { rf + fr + co }	// com edges are all rf, fr and co edges
@@ -120,8 +120,7 @@ fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initia
                                  {all e: Event | e in Event.rf_init implies initialization_access[e]}}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
-fact rf_init_total	{all e : (Read+CacheFlush) | 
-						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] implies e in (rf_init.Event+Event.rf_init)}
+fact rf_init_total  {all e1 : (Read+CacheFlush) | {some e2:Event | disj[e1,e2] and same_address[e1,e2] and initialization_access[e2]} and initialization_access[e1] implies e1 in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
@@ -233,20 +232,20 @@ fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }
 fun transient_events : Event { Event - committed_events }
 
 // assert that all commited event are connected by po if connected by tfo
-fact commits_connect {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(tfo+~tfo))
-	 implies (e->e' in ^(po+~po))}
+fact commits_connect {all disj e1,e2: Event | (e1 in committed_events and e2 in committed_events and e1->e2 in ^(tfo+~tfo))
+	 implies (e1->e2 in ^(po+~po))}
 
 //constrain com
 fact com_in_committed {com in committed_events <:Event->Event:> committed_events}	// com relates committed events only
 
 // initialization access
 // an initialization access acts on memory to which no write has happened before in transient fetch order
-pred initialization_access[e : Event]
-  {e in MemoryEvent and {all e' : Write | (disj[e,e'] and event_commits[e']) implies not(tfo_tc[e',e] and same_address[e,e'])}}
-// it is the first acces if there is no other initialization access that happens earlier in tfo order
-pred first_initialization_access[e : Event] 
-  { initialization_access[e] and 
-  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] implies tfo_tc[e,e']}}
+pred initialization_access[e1 : Event]
+  {e1 in MemoryEvent and {all e2 : Write | (disj[e1,e2] and event_commits[e2]) implies not(tfo_tc[e2,e1] and same_address[e1,e2])}}
+// it is the first access if there is no other initialization access that happens earlier in tfo order
+pred first_initialization_access[e1 : Event] 
+  { initialization_access[e1] and 
+  {all e2 : Event | disj[e1,e2] and e1.address = e2.address and initialization_access[e1] and same_thread[e1,e2] implies tfo_tc[e1,e2]}}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -255,29 +254,28 @@ pred first_initialization_access[e : Event]
 // =Leakage=
 
 // An intervening access writes to the same xstate location as the two instructions related by a com_arch edge
-pred intervening_access[e : Event, e' : Event]{
-  e->e' in com_arch and 
- {some e'':Event| disj[e'',e] and disj[e'',e'] 
-  and e->e'' not in  ^com_arch and e''->e' in ecomx 
-  and e'' in eXSWriters}
+pred intervening_access[e1 : Event, e2 : Event]{
+  e1->e2 in com_arch and 
+ {some e3:Event| disj[e3,e1] and disj[e3,e2] 
+  and e1->e3 not in  ^com_arch and e3->e1 in ecomx 
+  and e3 in eXSWriters}
 }
 
 // Whenever there is no corresponding comx edge for its respective com counterpart, the architectural communication is inconsistent with the extra-architecural communication
-pred com_comx_consistent[e : Event, e' : Event]{
-  (e->e' in rf implies e->e' in erfx)
-  and (e->e' in co implies e->e' in ecox)
-  and (e->e' in fr implies e->e' in efrx)
-  and (e->e' in rf_init implies e->e' in erfx)
+pred com_comx_consistent[e1 : Event, e2 : Event]{
+  (e1->e2 in rf implies e1->e2 in erfx)
+  and (e1->e2 in co implies e1->e2 in ecox)
+  and (e1->e2 in fr implies e1->e2 in efrx)
+  and (e1->e2 in rf_init implies e1->e2 in erfx)
 }
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
-pred leakage[e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])}
-pred leakage {some e, e' : Event | leakage[e,e']}
-fun leak : Event -> set Event {{e,e' : Event| leakage[e,e']}}
+pred leakage[e1 : Event, e2 : Event] {disj[e1,e2]  and (not com_comx_consistent[e1,e2] or intervening_access[e1,e2])}
+pred leakage {some e1, e2 : Event | leakage[e1,e2]}
+fun leak : Event -> set Event {{e1,e2 : Event| leakage[e1,e2]}}
 
 // =Sink and Source instructions=
-
-pred is_sink [e: Event] {some e':Event | leakage[e',e]}	// the sink is the instruction where information is leaked to
+pred is_sink [e1: Event] {some e2 : Event | leakage[e1,e2]}			// the sink is the instruction where information is leaked to
 fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }	// the sink instruction has to be a committed argument
 
 // A candidate source is always defined with respect to the sink(s) it leaks too. Any instruction related to the sink by comx is a candidate of a source for leakage. 
@@ -363,11 +361,11 @@ fun rf_init_p[p: PTag->univ] : MemoryEvent->MemoryEvent {
 
 pred initialization_access_p[e : Event,p: PTag->univ]
   {disj[e,p[RE]] and e in MemoryEvent and 
-  {all e' : (Write-p[RE]) | (disj[e,e'] and event_commits_p[e',p]) implies not(tfo_tc_p[e',e,p] and same_address[e,e'])}}
+  {all e1 : (Write-p[RE]) | (disj[e,e1] and event_commits_p[e1,p]) implies not(tfo_tc_p[e1,e,p] and same_address[e,e1])}}
 
 fun first_initialization_access_in_set_p [events : set Event,p: PTag->univ] : Event{
-{e : Event |  initialization_access_p[e,p] and //TODO: shouldn't this be events?
-{all e' : events | (disj[e,e'] and e.address = e'.address  and initialization_access_p[e',p] and same_thread_p[e,e',p]  implies tfo_tc_p[e,e',p])}}
+{e1 : Event |  initialization_access_p[e1,p] and //TODO: shouldn't this be events?
+{all e2 : events | (disj[e1,e2] and e1.address = e2.address  and initialization_access_p[e2,p] and same_thread_p[e1,e2,p]  implies tfo_tc_p[e1,e2,p])}}
 }
 
 //committed events
@@ -392,42 +390,42 @@ fun ecomx_p[p: PTag->univ] : Event->Event {erfx_p[p] + ecox_p[p] + efrx_p[p]}
 // An intervening access that causes leakage between e and e' stays the same if there is also the same com_arch edge in the perturbed model 
 // between e and e' as well as the same medling event e''. 
 // NOTE: We could use and instead of or in the second part of this predicate defition and make same leakage even more restrictive. TODO
-pred intervening_access_same[e : Event, e' : Event, p: PTag->univ]{
-  intervening_access[e,e']
+pred intervening_access_same[e1 : Event, e2 : Event, p: PTag->univ]{
+  intervening_access[e1,e2]
 implies( 
- {some e'' : Event | //Might have to change this to all, because we want the same intervening event
-  // e'' is an intervening event
-  disj[e'',e] and disj[e'',e'] 
-  and e->e'' not in  ^com_arch and e''->e' in ecomx 
-  and e'' in eXSWriters
-  // e'' is also an intervening event in the perturbed model
-  and ((e''->e' in erfx implies e''->e' in erfx_p[p])
-    or (e''->e' in ecox implies e''->e' in ecox_p[p])
-    or (e''->e' in efrx implies e''->e' in efrx_p[p]))
-  and  e'' in eXSWriters_p[p]
-  and (e->e'' not in  ^(com_arch_p[p]))
+ {some e3 : Event | //Might have to change this to all, because we want the same intervening event
+  // e3 is an intervening event
+  disj[e3,e1] and disj[e3,e2] 
+  and e1->e3 not in  ^com_arch and e3->e2 in ecomx 
+  and e3 in eXSWriters
+  // e3 is also an intervening event in the perturbed model
+  and ((e3->e2 in erfx implies e3->e2 in erfx_p[p])
+    or (e3->e2 in ecox implies e3->e2 in ecox_p[p])
+    or (e3->e2 in efrx implies e3->e2 in efrx_p[p]))
+  and  e3 in eXSWriters_p[p]
+  and (e1->e3 not in ^(com_arch_p[p]))
  }
 and
-((e->e' in rf implies e->e' in rf_p[p])
-or 
-(e->e' in co implies e->e' in co_p[p])
-or 
-(e->e' in fr implies e->e' in fr_p[p])
-or 
-(e->e' in rf_init implies e->e' in rf_init_p[p])))
+((e1->e2 in rf implies e1->e2 in rf_p[p])
+or
+(e1->e2 in co implies e1->e2 in co_p[p])
+or
+(e1->e2 in fr implies e1->e2 in fr_p[p])
+or
+(e1->e2 in rf_init implies e1->e2 in rf_init_p[p])))
 }
 
 // Whenever there is no corresponding comx edge for its respective com counterpart, the architectural communication is inconsistent with the extra-architecural communication
-pred com_comx_consistent_same[e : Event, e' : Event, p: PTag->univ]{
-  ((e->e' in rf and e->e' not in erfx) implies (e->e' in rf_p[p] and e->e' not in erfx_p[p]))
-  and ((e->e' in co and e->e' not in ecox) implies (e->e' in co_p[p] and e->e' not in ecox_p[p]))
-  and ((e->e' in fr and e->e' not in efrx) implies (e->e' in fr_original_p[p] and e->e' not in efrx_p[p]))
-  and ((e->e' in rf_init and e->e' not in erfx) implies (e->e' in rf_init_p[p] and e->e' not in erfx_p[p]))
+pred com_comx_consistent_same[e1 : Event, e2 : Event, p: PTag->univ]{
+  ((e1->e2 in rf and e1->e2 not in erfx) implies (e1->e2 in rf_p[p] and e1->e2 not in erfx_p[p]))
+  and ((e1->e2 in co and e1->e2 not in ecox) implies (e1->e2 in co_p[p] and e1->e2 not in ecox_p[p]))
+  and ((e1->e2 in fr and e1->e2 not in efrx) implies (e1->e2 in fr_original_p[p] and e1->e2 not in efrx_p[p]))
+  and ((e1->e2 in rf_init and e1->e2 not in erfx) implies (e1->e2 in rf_init_p[p] and e1->e2 not in erfx_p[p]))
 }
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
 pred leakage_different[p: PTag->univ] 
-{all e,e' : Event | leakage[e,e']  implies (not com_comx_consistent_same[e,e',p] or not intervening_access_same[e,e',p])}
+{all e1,e2 : Event | leakage[e1,e2]  implies (not com_comx_consistent_same[e1,e2,p] or not intervening_access_same[e1,e2,p])}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SECTION 8: Run Alloy
@@ -464,23 +462,23 @@ pred irreflexive[rel: (Event+XSAccess)->(Event+XSAccess)]       { no iden & rel 
 pred acyclic[rel: (Event+XSAccess)->(Event+XSAccess)]           { irreflexive[^rel] }
 pred total[rel: (Event+XSAccess)->(Event+XSAccess), bag: (Event+XSAccess)] {
   // all unique event are part of the relation and the relation is acyclic
-  all disj e, e': bag | e->e' in rel + ~rel
+  all disj e1, e2: bag | e1->e2 in rel + ~rel
   acyclic[rel]
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
 // program and transient fetch order
-pred po_tc[e : Event, e' : Event] { e->e' in ^po }	// e happens before e' in program order
-pred tfo_tc[e: Event, e': Event] { e->e' in ^tfo }	// e happens before e' in transient fetch order
-pred same_address[e : Event, e' : Event] { e.address = e'.address }	// both events access the same adress
-pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}	// both events access the same xstate
-pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^tfo + ^~tfo)}	// both events are in the same thread
-pred event_commits[e: Event] { e in committed_events }	// the event commits
-pred event_transients[e: Event] { e in transient_events }	// the event does not commit
+pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e happens before e' in program order
+pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e happens before e' in transient fetch order
+pred same_address[e1 : Event, e2 : Event] { e1.address = e2.address }	// both events access the same adress
+pred same_xstate[e1 : Event, e2 : Event] {e1.xstate_access.xstate = e2.xstate_access.xstate}	// both events access the same xstate
+pred same_thread[e1 : Event, e2 : Event] { e1->e2 in (iden + ^tfo + ^~tfo)}	// both events are in the same thread
+pred event_commits[e1: Event] { e1 in committed_events }	// the event commits
+pred event_transients[e1: Event] { e1 in transient_events }	// the event does not commit
 
 // under pertubation
 // Note: with the current definition of po_p and tfo_p this is actually not needed.
-pred po_tc_p[e : Event, e' : Event, p: PTag->univ] { e->e' in ^(po_p[p]) }	// e happens before e' in program order
-pred tfo_tc_p[e: Event, e': Event, p: PTag->univ] { e->e' in ^(tfo_p[p]) }	// e happens before e' in transient fetch order
-pred same_thread_p[e : Event, e' : Event, p: PTag->univ] { e->e' in (iden + ^(tfo_p[p]) + ^~(tfo_p[p]))}	// both events are in the same thread
+pred po_tc_p[e1 : Event, e2 : Event, p: PTag->univ] { e1->e2 in ^(po_p[p]) }	// e1 happens before e2 in program order
+pred tfo_tc_p[e1: Event, e2: Event, p: PTag->univ] { e1->e2 in ^(tfo_p[p]) }	// e1 happens before e2 in transient fetch order
+pred same_thread_p[e1 : Event, e2 : Event, p: PTag->univ] { e1->e2 in (iden + ^(tfo_p[p]) + ^~(tfo_p[p]))}	// both events are in the same thread
