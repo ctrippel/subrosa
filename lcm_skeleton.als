@@ -108,8 +108,7 @@ fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initia
                                  {all e: Event | e in Event.rf_init implies initialization_access[e]}}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}			// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
-fact rf_init_total	{all e1 : (Read+CacheFlush) | 
-						{some e2:Event | disj[e1,e2] and same_address[e1,e2] and initialization_access[e2]} and initialization_access[e1] implies e1 in (rf_init.Event+Event.rf_init)}
+fact rf_init_total  {all e1 : (Read+CacheFlush) | {some e2:Event | disj[e1,e2] and same_address[e1,e2] and initialization_access[e2]} and initialization_access[e1] implies e1 in (rf_init.Event+Event.rf_init)}
 
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
@@ -229,7 +228,7 @@ fact com_in_committed {com in committed_events <:Event->Event:> committed_events
 // an initialization access acts on memory to which no write has happened before in transient fetch order
 pred initialization_access[e1 : Event]
   {e1 in MemoryEvent and {all e2 : Write | (disj[e1,e2] and event_commits[e2]) implies not(tfo_tc[e2,e1] and same_address[e1,e2])}}
-// it is the first acces if there is no other initialization access that happens earlier in tfo order
+// it is the first access if there is no other initialization access that happens earlier in tfo order
 pred first_initialization_access[e1 : Event] 
   { initialization_access[e1] and 
   {all e2 : Event | disj[e1,e2] and e1.address = e2.address and initialization_access[e1] and same_thread[e1,e2] implies tfo_tc[e1,e2]}}
@@ -262,7 +261,6 @@ pred leakage {some e1, e2 : Event | leakage[e1,e2]}
 fun leak : Event -> set Event {{e1,e2 : Event| leakage[e1,e2]}}
 
 // =Sink and Source instructions=
-
 pred is_sink [e1: Event] {some e2 : Event | leakage[e1,e2]}			// the sink is the instruction where information is leaked to
 fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }	// the sink instruction has to be a committed argument
 
@@ -329,7 +327,6 @@ run{
 run{
    #data_leak > 0
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =Alloy shortcuts=
