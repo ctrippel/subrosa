@@ -85,7 +85,7 @@ fact reg_no_rf_init {all r : REG | all e : Event | disj[rf_init.r,e] and disj[r.
 fact po_acyclic { acyclic[po] }							// po is acyclic
 fact po_prior { all e : Event | lone e.~po }		// all events are related to 0 or 1 events by po
 // If there are several instructions related by po in a thread there is exactly one sequence connecting all them by po
-fact po_connect { all e : Event | all e':Event |  (e->e' in ^tfo and e in Event.~po and e' in Event.po) implies (e->e' in ^po+^~po)}
+fact po_connect { all e1, e2 : Event |  (e1->e2 in ^tfo and e1 in Event.~po and e2 in Event.po) implies (e1->e2 in ^po+^~po)}
 
 //com
 fun com : MemoryEvent->MemoryEvent { rf + fr + co }	// com edges are all rf, fr and co edges
@@ -108,9 +108,7 @@ fact rf_init_initialize {{all e: Event | e in rf_init.Event implies first_initia
                                  {all e: Event | e in Event.rf_init implies initialization_access[e]}}	// rf_init edges relate an first_initialisation_access to an initialisation_access
 fact rf_init_domain {(MemoryEvent.rf_init+rf_init.MemoryEvent) in (Read+CacheFlush)}	// rf_init edges relate only non-write instructions
 // if there is an initialization access in the same thread as a distinct first initialization access it they have to be related by rf_init
-fact rf_init_total	{all e : (Read+CacheFlush) | 
-						{some e':Event | disj[e,e'] and same_address[e,e'] and initialization_access[e']} and initialization_access[e] implies e in (rf_init.Event+Event.rf_init)}
-
+fact rf_init_total  {all e1 : (Read+CacheFlush) | {some e2:Event | disj[e1,e2] and same_address[e1,e2] and initialization_access[e2]} and initialization_access[e1] implies e1 in (rf_init.Event+Event.rf_init)}
 //com_arch edges 
 fun com_arch : MemoryEvent->MemoryEvent { rf_init + com }	// com_arch edges are all rf_init and com edges
 
@@ -216,20 +214,20 @@ fun committed_events : Event { po.Event + Event.po + Event.(rf+fr+~rf+~fr) }
 fun transient_events : Event { Event - committed_events }
 
 // assert that all commited event are connected by po if connected by tfo
-fact commits_connect {all disj e,e': Event | (e in committed_events and e' in committed_events and e->e' in ^(tfo+~tfo))
-	 implies (e->e' in ^(po+~po))}
+fact commits_connect {all disj e1,e2: Event | (e1 in committed_events and e2 in committed_events and e1->e2 in ^(tfo+~tfo))
+	 implies (e1->e2 in ^(po+~po))}
 
 //constrain com
 fact com_in_committed {com in committed_events <:Event->Event:> committed_events}	// com relates committed events only
 
 // initialization access
 // an initialization access acts on memory to which no write has happened before in transient fetch order
-pred initialization_access[e : Event]
-  {e in MemoryEvent and {all e' : Write | (disj[e,e'] and event_commits[e']) implies not(tfo_tc[e',e] and same_address[e,e'])}}
-// it is the first acces if there is no other initialization access that happens earlier in tfo order
-pred first_initialization_access[e : Event] 
-  { initialization_access[e] and 
-  {all e' : Event | disj[e,e'] and e.address = e'.address  and initialization_access[e'] and same_thread[e,e'] implies tfo_tc[e,e']}}
+pred initialization_access[e1 : Event]
+  {e1 in MemoryEvent and {all e2 : Write | (disj[e1,e2] and event_commits[e2]) implies not(tfo_tc[e2,e1] and same_address[e1,e2])}}
+// it is the first access if there is no other initialization access that happens earlier in tfo order
+pred first_initialization_access[e1 : Event] 
+  { initialization_access[e1] and 
+  {all e2 : Event | disj[e1,e2] and e1.address = e2.address and initialization_access[e1] and same_thread[e1,e2] implies tfo_tc[e1,e2]}}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,29 +236,28 @@ pred first_initialization_access[e : Event]
 // =Leakage=
 
 // An intervening access writes to the same xstate location as the two instructions related by a com_arch edge
-pred intervening_access[e : Event, e' : Event]{
-  e->e' in com_arch and 
- {some e'':Event| disj[e'',e] and disj[e'',e'] 
-  and e->e'' not in  ^com_arch and e''->e' in ecomx 
-  and e'' in eXSWriters}
+pred intervening_access[e1 : Event, e2 : Event]{
+  e1->e2 in com_arch and 
+ {some e3:Event| disj[e3,e1] and disj[e3,e2] 
+  and e1->e3 not in  ^com_arch and e3->e1 in ecomx 
+  and e3 in eXSWriters}
 }
 
 // Whenever there is no corresponding comx edge for its respective com counterpart, the architectural communication is inconsistent with the extra-architecural communication
-pred com_comx_consistent[e : Event, e' : Event]{
-  (e->e' in rf implies e->e' in erfx)
-  and (e->e' in co implies e->e' in ecox)
-  and (e->e' in fr implies e->e' in efrx)
-  and (e->e' in rf_init implies e->e' in erfx)
+pred com_comx_consistent[e1 : Event, e2 : Event]{
+  (e1->e2 in rf implies e1->e2 in erfx)
+  and (e1->e2 in co implies e1->e2 in ecox)
+  and (e1->e2 in fr implies e1->e2 in efrx)
+  and (e1->e2 in rf_init implies e1->e2 in erfx)
 }
 
 // leakage can only occur between two disjoint events if there is an intervening access or a com edge that is inconsistent with the respective comx counterpart
-pred leakage[e : Event, e' : Event] {disj[e,e']  and (not com_comx_consistent[e,e'] or intervening_access[e,e'])}
-pred leakage {some e, e' : Event | leakage[e,e']}
-fun leak : Event -> set Event {{e,e' : Event| leakage[e,e']}}
+pred leakage[e1 : Event, e2 : Event] {disj[e1,e2]  and (not com_comx_consistent[e1,e2] or intervening_access[e1,e2])}
+pred leakage {some e1, e2 : Event | leakage[e1,e2]}
+fun leak : Event -> set Event {{e1,e2 : Event| leakage[e1,e2]}}
 
 // =Sink and Source instructions=
-
-pred is_sink [e: Event] {some e' : Event | leakage[e',e]}	// the sink is the instruction where information is leaked to
+pred is_sink [e1: Event] {some e2 : Event | leakage[e1,e2]}			// the sink is the instruction where information is leaked to
 fact sink_is_committed {all e : Event | is_sink[e] implies event_commits[e] }	// the sink instruction has to be a committed argument
 
 // A candidate source is always defined with respect to the sink(s) it leaks too. Any instruction related to the sink by comx is a candidate of a source for leakage. 
@@ -294,8 +291,8 @@ pred speculative_leakage{speculation_primitive in leak.Event}
 
 fun po_loc : MemoryEvent->MemoryEvent { ^po & address.~address }		// connects all same address events in program order
 fun tfo_loc : MemoryEvent->MemoryEvent { ^po & address.~address }		// connects all same address events in transient fetch order
-fun rfi : MemoryEvent->MemoryEvent{{e, e' : MemoryEvent | e->e' in rf and same_thread[e,e']}}
-fun rfxi : MemoryEvent->MemoryEvent{{e, e' : MemoryEvent | e->e' in erfx and same_thread[e,e']}}
+fun rfi : MemoryEvent->MemoryEvent{{e1, e2 : MemoryEvent | e1->e2 in rf and same_thread[e1,e2]}}
+fun rfxi : MemoryEvent->MemoryEvent{{e1, e2 : MemoryEvent | e1->e2 in erfx and same_thread[e1,e2]}}
 fun rfe: MemoryEvent->MemoryEvent { rf - rfi}
 fun rfxe: MemoryEvent->MemoryEvent { erfx - rfxi}
 fun ppo: MemoryEvent->MemoryEvent {^po & (Write->Write + Read->Write + Read->Read)}
@@ -341,7 +338,7 @@ run{
 
 //E.g., find models that feature leakage between two Reads
 run{
-  some e : Read | some e' : Read | leakage[e,e']
+  some e1 : Read | some e2 : Read | leakage[e1,e2]
 }
 
 //E.g., find models that feature data_leakage
@@ -357,17 +354,17 @@ pred irreflexive[rel: (Event+XSAccess)->(Event+XSAccess)]       { no iden & rel 
 pred acyclic[rel: (Event+XSAccess)->(Event+XSAccess)]           { irreflexive[^rel] }
 pred total[rel: (Event+XSAccess)->(Event+XSAccess), bag: (Event+XSAccess)] {
   // all unique event are part of the relation and the relation is acyclic
-  all disj e, e': bag | e->e' in rel + ~rel
+  all disj e1, e2: bag | e1->e2 in rel + ~rel
   acyclic[rel]
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // =LCM shortcuts=
 // program and transient fetch order
-pred po_tc[e : Event, e' : Event] { e->e' in ^po }	// e happens before e' in program order
-pred tfo_tc[e: Event, e': Event] { e->e' in ^tfo }	// e happens before e' in transient fetch order
-pred same_address[e : Event, e' : Event] { e.address = e'.address }	// both events access the same adress
-pred same_xstate[e : Event, e' : Event] {e.xstate_access.xstate = e'.xstate_access.xstate}	// both events access the same xstate
-pred same_thread[e : Event, e' : Event] { e->e' in (iden + ^tfo + ^~tfo)}	// both events are in the same thread
-pred event_commits[e: Event] { e in committed_events }	// the event commits
-pred event_transients[e: Event] { e in transient_events }	// the event does not commit
+pred po_tc[e1 : Event, e2 : Event] { e1->e2 in ^po }	// e happens before e' in program order
+pred tfo_tc[e1: Event, e2: Event] { e1->e2 in ^tfo }	// e happens before e' in transient fetch order
+pred same_address[e1 : Event, e2 : Event] { e1.address = e2.address }	// both events access the same adress
+pred same_xstate[e1 : Event, e2 : Event] {e1.xstate_access.xstate = e2.xstate_access.xstate}	// both events access the same xstate
+pred same_thread[e1 : Event, e2 : Event] { e1->e2 in (iden + ^tfo + ^~tfo)}	// both events are in the same thread
+pred event_commits[e1: Event] { e1 in committed_events }	// the event commits
+pred event_transients[e1: Event] { e1 in transient_events }	// the event does not commit
