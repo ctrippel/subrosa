@@ -6,7 +6,7 @@ open lcm_skeleton as lcm
 pred t1[] {#Event = 5 and #CacheFlush = 1 and #Branch=1 and #Read = 3 and #Write = 0 and #REG=0}
 pred t2[] {#Address = 2 and #XState=3}
 pred t3[] {#po=2 and #tfo=4}
-pred t4[] {#addr = 1 and #erfx = 2 and #ecox = 1 and #efrx > 1 and #rf_init =2 and #rf=0 and #co=0 and #fr=0}
+pred t4[] {#addr = 1 and #erfx = 2 and #ecox = 1 and #efrx > 0 and #rf_init =2 and #rf=0 and #co=0 and #fr=0}
 pred t5[] {
 some disj a0, a1 : Address | some disj s0, s1, s2 : XState | 
 some cf : CacheFlush | some disj r1, r2, r3 : Read | some br : Branch |

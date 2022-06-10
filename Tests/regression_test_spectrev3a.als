@@ -5,7 +5,7 @@ open lcm_skeleton as lcm
 pred t1[] {#Event = 4 and #CacheFlush = 1 and #Read = 3 and #REG = 1}
 pred t2[] {#Address = 2 and #XState=2}
 pred t3[] {#po=1 and #tfo=3}
-pred t4[] {#addr = 1 and #erfx = 2 and #ecox = 1 /*and #efrx = 1*/ and #rf_init =2 and #rf=0 and #co=0 and #fr=0}
+pred t4[] {#addr = 1 and #erfx = 2 and #ecox = 1 and #efrx > 0 and #rf_init =2 and #rf=0 and #co=0 and #fr=0}
 pred t5[] {
 some disj a1, a2 : Address | some disj s1, R : XState |
 some cf : CacheFlush | some r1, r2 : Read | some reg : REG  |
@@ -22,11 +22,11 @@ fact{t1 && t2 && t3 && t4 && t5}
 //run{} for 4
 
 // Check if our model captures the leakage
-check {not {some e:Event| some e':Event| not no_leakage[e,e']}} for 4
+//check {not {some e:Event| some e1:Event| leakage[e,e1]}} for 4
 
 // Check if the leakage is caused by an intervening access or lacking extra architectural communication or both
-//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (com_comx_consistent[e,e'])}}} for 5
-//check {not {some e:Event| some e':Event| not {e != e' and e->e' in com_arch and same_xstate[e,e'] => (not intervening_access[e,e'])}}} for 4
+//check {not {some e1:Event| some e2:Event| not {e1 != e2 and e1->e2 in com_arch and same_xstate[e1,e2] => (com_comx_consistent[e1,e2])}}} for 5
+//check {not {some e1:Event| some e2:Event| not {e1 != e2 and e1->e2 in com_arch and same_xstate[e1,e2] => (not intervening_access[e1,e2])}}} for 4
 
 // Identify what is leaked
 //check {not {some candidate_source: Event | some sink:Event | xstate_leakage[candidate_source,sink]}} for 5
