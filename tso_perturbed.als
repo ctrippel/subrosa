@@ -469,8 +469,8 @@ let interesting_not_axiom{
 
 // Find tests that contain leakage but were sorted out because they are not minimal
 run test0{
-  leakage and not interesting_not_axiom[] and #Event = 2
-} for 2
+  leakage and not interesting_not_axiom[] and #Event = 3
+} for 3
 
 // Find tests that are minimal with respect to leakage
 run test1{
